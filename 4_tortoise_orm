@@ -1,0 +1,80 @@
+"""
+Tortoise ORM 실행 가능 예제 (async 전용)
+설치: pip install tortoise-orm --break-system-packages
+
+실행: python 4_tortoise_orm_example.py
+"""
+
+import asyncio
+from tortoise import Tortoise, fields, run_async
+from tortoise.models import Model
+from tortoise.expressions import Q
+
+
+# -----------------------------
+# 1. 모델(User 클래스) 정의
+# -----------------------------
+class User(Model):
+    id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=100)
+    age = fields.IntField()
+    ssn = fields.CharField(max_length=20)  # 민감 컬럼 예시
+
+    class Meta:
+        table = "users"
+
+
+async def main():
+    # -----------------------------
+    # 2. DB 초기화 (SQLite 인메모리)
+    # -----------------------------
+    await Tortoise.init(
+        db_url="sqlite://:memory:",
+        modules={"models": ["__main__"]},
+    )
+    await Tortoise.generate_schemas()
+
+    # -----------------------------
+    # 3. 샘플 데이터 삽입
+    # -----------------------------
+    await User.create(name="철수", age=25, ssn="900101-1111111")
+    await User.create(name="영희", age=17, ssn="080505-2222222")
+    await User.create(name="민수", age=32, ssn="920312-1333333")
+
+    print("=" * 60)
+    print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+    print("=" * 60)
+
+    # -----------------------------
+    # 4-1. values() - 딕셔너리 반환
+    # -----------------------------
+    print("\n[1] values() - 딕셔너리 반환")
+    result = await User.filter(age__gt=20).values("name", "age")
+    for row in result:
+        print(row)
+
+    # -----------------------------
+    # 4-2. values_list() - 튜플 반환
+    # -----------------------------
+    print("\n[2] values_list() - 튜플 반환")
+    result = await User.filter(age__gt=20).values_list("name", "age")
+    for row in result:
+        print(row)
+
+    # -----------------------------
+    # 4-3. only() - 객체 유지, 컬럼 제한
+    # -----------------------------
+    print("\n[3] only() - 객체 형태 유지, 컬럼 제한")
+    result = await User.filter(age__gt=20).only("id", "name", "age")
+    for u in result:
+        print(u.name, u.age)
+
+    # -----------------------------
+    # 4-4. Q 객체 사용
+    # -----------------------------
+    print("\n[4] Q 객체 사용 스타일")
+    result = await User.filter(Q(age__gt=20)).values("name", "age")
+    for row in result:
+        print(row)
+
+run_async(main())

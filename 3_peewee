@@ -1,0 +1,74 @@
+"""
+Peewee 실행 가능 예제
+설치: pip install peewee --break-system-packages
+
+실행: python 3_peewee_example.py
+"""
+
+from peewee import SqliteDatabase, Model, CharField, IntegerField
+
+# -----------------------------
+# 1. DB 연결
+# -----------------------------
+db = SqliteDatabase(":memory:")
+
+
+# -----------------------------
+# 2. 모델(User 클래스) 정의
+# -----------------------------
+class User(Model):
+    name = CharField()
+    age = IntegerField()
+    ssn = CharField()  # 민감 컬럼 예시
+
+    class Meta:
+        database = db
+
+
+# -----------------------------
+# 3. 테이블 생성 및 샘플 데이터 삽입
+# -----------------------------
+db.connect()
+db.create_tables([User])
+
+User.create(name="철수", age=25, ssn="900101-1111111")
+User.create(name="영희", age=17, ssn="080505-2222222")
+User.create(name="민수", age=32, ssn="920312-1333333")
+
+print("=" * 60)
+print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+print("=" * 60)
+
+# -----------------------------
+# 4-1. select() + where() - 컬럼 지정
+# -----------------------------
+print("\n[1] select(컬럼, 컬럼) + where()")
+query = User.select(User.name, User.age).where(User.age > 20)
+for row in query:
+    print(row.name, row.age)
+
+# -----------------------------
+# 4-2. dicts() - 결과를 딕셔너리로 받기
+# -----------------------------
+print("\n[2] dicts() - 딕셔너리 형태로 반환")
+query = User.select(User.name, User.age).where(User.age > 20).dicts()
+for row in query:
+    print(row)
+
+# -----------------------------
+# 4-3. tuples() - 결과를 튜플로 받기
+# -----------------------------
+print("\n[3] tuples() - 튜플 형태로 반환")
+query = User.select(User.name, User.age).where(User.age > 20).tuples()
+for row in query:
+    print(row)
+
+# -----------------------------
+# 4-4. filter() 메서드 (Django 스타일 흉내, 전체 컬럼 반환됨)
+# -----------------------------
+print("\n[4] filter() 스타일 (컬럼 제한은 별도로 처리 필요)")
+query = User.filter(age__gt=20)
+for u in query:
+    print(u.name, u.age)
+
+db.close()

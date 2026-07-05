@@ -1,0 +1,130 @@
+"""
+SQLAlchemy 실행 가능 예제
+설치: pip install sqlalchemy --break-system-packages
+
+실행: python 1_sqlalchemy_example.py
+
+동일 쿼리(name, age 컬럼만, age > 20)를 SQLAlchemy 안에서 가능한
+여러 스타일로 작성하고 실제로 실행합니다.
+"""
+
+from sqlalchemy import (
+    create_engine, Column, Integer, String, select, text, and_,
+    Table, MetaData
+)
+from sqlalchemy.orm import declarative_base, sessionmaker, load_only
+
+# -----------------------------
+# 1. 모델(User 클래스) 정의
+# -----------------------------
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    age = Column(Integer)
+    ssn = Column(String)  # 민감 컬럼 예시 (권한 없으면 조회 금지 대상이라고 가정)
+
+
+# -----------------------------
+# 2. DB 및 세션 준비 (SQLite 인메모리)
+# -----------------------------
+engine = create_engine("sqlite:///:memory:", echo=False)
+Base.metadata.create_all(engine)
+
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# -----------------------------
+# 3. 샘플 데이터 삽입
+# -----------------------------
+sample_users = [
+    User(name="철수", age=25, ssn="900101-1111111"),
+    User(name="영희", age=17, ssn="080505-2222222"),
+    User(name="민수", age=32, ssn="920312-1333333"),
+]
+session.add_all(sample_users)
+session.commit()
+
+print("=" * 60)
+print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+print("=" * 60)
+
+# -----------------------------
+# 4-1. Legacy Query API - 컬럼 직접 지정
+# -----------------------------
+print("\n[1] Legacy Query API - query(컬럼, 컬럼)")
+result = session.query(User.name, User.age).filter(User.age > 20).all()
+for row in result:
+    print(row)
+
+# -----------------------------
+# 4-2. Legacy Query API - 전체 객체 조회 후 필드 접근
+# -----------------------------
+print("\n[2] Legacy Query API - 전체 객체 조회 후 필드만 접근")
+users = session.query(User).filter(User.age > 20).all()
+for u in users:
+    print(u.name, u.age)
+
+# -----------------------------
+# 4-3. 2.0 스타일 - select() + execute()
+# -----------------------------
+print("\n[3] 2.0 스타일 - select() + session.execute()")
+stmt = select(User.name, User.age).where(User.age > 20)
+result = session.execute(stmt).all()
+for row in result:
+    print(row)
+
+# -----------------------------
+# 4-4. 2.0 스타일 - scalars() (단일 컬럼일 때)
+# -----------------------------
+print("\n[4] 2.0 스타일 - select() 단일 컬럼 + scalars()")
+stmt = select(User.name).where(User.age > 20)
+names = session.execute(stmt).scalars().all()
+print(names)
+
+# -----------------------------
+# 4-5. load_only() - 객체 형태는 유지, 컬럼만 제한
+# -----------------------------
+print("\n[5] load_only() - ORM 객체 유지하며 컬럼 제한")
+stmt = select(User).options(load_only(User.name, User.age)).where(User.age > 20)
+users = session.execute(stmt).scalars().all()
+for u in users:
+    print(u.name, u.age)
+
+# -----------------------------
+# 4-6. Core 방식 - Table 객체 직접 사용 (ORM 클래스 없이)
+# -----------------------------
+print("\n[6] Core 방식 - Table 객체 직접 조회")
+metadata = MetaData()
+users_table = Table("users", metadata, autoload_with=engine)
+stmt = select(users_table.c.name, users_table.c.age).where(users_table.c.age > 20)
+with engine.connect() as conn:
+    result = conn.execute(stmt).all()
+    for row in result:
+        print(row)
+
+# -----------------------------
+# 4-7. Core 방식 - text()로 raw SQL 실행 (ORM 완전 우회)
+# -----------------------------
+print("\n[7] Core 방식 - text()로 raw SQL 직접 실행 (ORM 우회 경로)")
+with engine.connect() as conn:
+    result = conn.execute(
+        text("SELECT name, age FROM users WHERE age > :age"), {"age": 20}
+    ).all()
+    for row in result:
+        print(row)
+
+# -----------------------------
+# 4-8. and_() 명시적 사용
+# -----------------------------
+print("\n[8] and_() 명시적 사용 스타일")
+stmt = select(User.name, User.age).where(and_(User.age > 20))
+result = session.execute(stmt).all()
+for row in result:
+    print(row)
+
+session.close()

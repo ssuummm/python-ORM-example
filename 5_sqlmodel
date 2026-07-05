@@ -1,0 +1,57 @@
+"""
+SQLModel 실행 가능 예제
+설치: pip install sqlmodel --break-system-packages
+
+실행: python 5_sqlmodel_example.py
+"""
+
+from typing import Optional
+from sqlmodel import SQLModel, Field, create_engine, Session, select, text
+
+
+# -----------------------------
+# 1. 모델(User 클래스) 정의
+# -----------------------------
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    age: int
+    ssn: str  # 민감 컬럼 예시
+
+
+# -----------------------------
+# 2. DB 및 세션 준비
+# -----------------------------
+engine = create_engine("sqlite:///:memory:", echo=False)
+SQLModel.metadata.create_all(engine)
+
+with Session(engine) as session:
+    # -----------------------------
+    # 3. 샘플 데이터 삽입
+    # -----------------------------
+    session.add(User(name="철수", age=25, ssn="900101-1111111"))
+    session.add(User(name="영희", age=17, ssn="080505-2222222"))
+    session.add(User(name="민수", age=32, ssn="920312-1333333"))
+    session.commit()
+
+    print("=" * 60)
+    print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+    print("=" * 60)
+
+    # -----------------------------
+    # 4-1. select() + exec() - 컬럼 지정
+    # -----------------------------
+    print("\n[1] select(컬럼, 컬럼) + session.exec()")
+    statement = select(User.name, User.age).where(User.age > 20)
+    result = session.exec(statement).all()
+    for row in result:
+        print(row)
+
+    # -----------------------------
+    # 4-2. 전체 모델 조회 후 필드 접근
+    # -----------------------------
+    print("\n[2] 전체 모델 조회 후 필드만 접근")
+    statement = select(User).where(User.age > 20)
+    users = session.exec(statement).all()
+    for u in users:
+        print(u.name, u.age)

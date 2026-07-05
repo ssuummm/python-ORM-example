@@ -1,0 +1,96 @@
+"""
+Django ORM 실행 가능 예제 (Django 프로젝트 없이 standalone으로 실행)
+설치: pip install django --break-system-packages
+
+실행: python 2_django_orm_example.py
+"""
+
+import django
+from django.conf import settings
+
+# -----------------------------
+# 0. Django standalone 설정 (settings.py 없이 실행하기 위한 최소 설정)
+# -----------------------------
+settings.configure(
+    INSTALLED_APPS=["__main__"],
+    DATABASES={
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
+    },
+)
+django.setup()
+
+from django.db import models, connection
+
+# -----------------------------
+# 1. 모델(User 클래스) 정의
+# -----------------------------
+class User(models.Model):
+    name = models.CharField(max_length=100)
+    age = models.IntegerField()
+    ssn = models.CharField(max_length=20)  # 민감 컬럼 예시
+
+    class Meta:
+        app_label = "__main__"
+
+
+# -----------------------------
+# 2. 테이블 생성 (마이그레이션 없이 직접 생성)
+# -----------------------------
+with connection.schema_editor() as schema_editor:
+    schema_editor.create_model(User)
+
+# -----------------------------
+# 3. 샘플 데이터 삽입
+# -----------------------------
+User.objects.create(name="철수", age=25, ssn="900101-1111111")
+User.objects.create(name="영희", age=17, ssn="080505-2222222")
+User.objects.create(name="민수", age=32, ssn="920312-1333333")
+
+print("=" * 60)
+print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+print("=" * 60)
+
+# -----------------------------
+# 4-1. values() - 딕셔너리 리스트 반환
+# -----------------------------
+print("\n[1] values() - 딕셔너리 반환")
+result = User.objects.filter(age__gt=20).values("name", "age")
+for row in result:
+    print(row)
+
+# -----------------------------
+# 4-2. values_list() - 튜플 리스트 반환
+# -----------------------------
+print("\n[2] values_list() - 튜플 반환")
+result = User.objects.filter(age__gt=20).values_list("name", "age")
+for row in result:
+    print(row)
+
+# -----------------------------
+# 4-3. only() - 객체 형태 유지하며 컬럼 제한
+# -----------------------------
+print("\n[3] only() - 객체 형태 유지, 필요한 컬럼만 DB에서 로드")
+result = User.objects.filter(age__gt=20).only("name", "age")
+for u in result:
+    print(u.name, u.age)
+
+# -----------------------------
+# 4-4. Q 객체 사용
+# -----------------------------
+print("\n[4] Q 객체 사용 스타일")
+from django.db.models import Q
+
+result = User.objects.filter(Q(age__gt=20)).values("name", "age")
+for row in result:
+    print(row)
+
+# -----------------------------
+# 4-5. filter, values 순서 바꿔서 체이닝
+# -----------------------------
+print("\n[5] 체이닝 순서를 바꾼 스타일 (values 먼저, filter 나중)")
+result = User.objects.values("name", "age").filter(age__gt=20)
+for row in result:
+    print(row)

@@ -1,0 +1,48 @@
+"""
+Pony ORM 실행 가능 예제
+설치: pip install pony --break-system-packages
+
+실행: python 6_pony_orm_example.py
+"""
+
+from pony.orm import Database, Required, db_session, select, commit
+
+# -----------------------------
+# 1. DB 정의
+# -----------------------------
+db = Database()
+db.bind(provider="sqlite", filename=":memory:")
+
+
+# -----------------------------
+# 2. 모델(User 클래스) 정의
+# -----------------------------
+class User(db.Entity):
+    name = Required(str)
+    age = Required(int)
+    ssn = Required(str)  # 민감 컬럼 예시
+
+
+db.generate_mapping(create_tables=True)
+
+# -----------------------------
+# 3. 샘플 데이터 삽입
+# -----------------------------
+with db_session:
+    User(name="철수", age=25, ssn="900101-1111111")
+    User(name="영희", age=17, ssn="080505-2222222")
+    User(name="민수", age=32, ssn="920312-1333333")
+    commit()
+
+print("=" * 60)
+print("목표 쿼리: SELECT name, age FROM users WHERE age > 20")
+print("=" * 60)
+
+# -----------------------------
+# 4-1. 제너레이터 표현식 스타일
+# -----------------------------
+print("\n[1] 제너레이터 표현식 스타일 select()")
+with db_session:
+    result = select((u.name, u.age) for u in User if u.age > 20)
+    for row in result:
+        print(row)
