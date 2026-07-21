@@ -1,0 +1,84 @@
+Sub JoinSchemaWithMyaccess()
+    Dim wsSchema As Worksheet, wsAccess As Worksheet, wsResult As Worksheet
+    Dim lastRowSchema As Long, lastRowAccess As Long
+    Dim colMenuSchema As Integer, colMenuAccess As Integer
+    Dim colGroupCode As Integer, colGroupName As Integer
+    Dim i As Long, j As Long, outRow As Long
+    Dim menuCode As String
+    Dim matched As Boolean
+
+    Set wsSchema = ThisWorkbook.Sheets("Schema")
+    Set wsAccess = ThisWorkbook.Sheets("Myaccess")
+
+    ' 결과 시트 새로 생성 (이미 있으면 삭제 후 재생성)
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    ThisWorkbook.Sheets("Schema_Joined").Delete
+    Application.DisplayAlerts = True
+    On Error GoTo 0
+    Set wsResult = ThisWorkbook.Sheets.Add(After:=wsSchema)
+    wsResult.Name = "Schema_Joined"
+
+    ' 헤더 기준으로 컬럼 위치 자동 탐색
+    colMenuSchema = FindColumn(wsSchema, "메뉴 코드")
+    colMenuAccess = FindColumn(wsAccess, "메뉴코드")
+    colGroupCode = FindColumn(wsAccess, "권한그룹코드")
+    colGroupName = FindColumn(wsAccess, "권한그룹명")
+
+    If colMenuSchema = 0 Or colMenuAccess = 0 Or colGroupCode = 0 Or colGroupName = 0 Then
+        MsgBox "헤더를 찾을 수 없습니다. 컬럼명을 확인해주세요.", vbCritical
+        Exit Sub
+    End If
+
+    lastRowSchema = wsSchema.Cells(wsSchema.Rows.Count, colMenuSchema).End(xlUp).Row
+    lastRowAccess = wsAccess.Cells(wsAccess.Rows.Count, colMenuAccess).End(xlUp).Row
+    Dim lastColSchema As Integer
+    lastColSchema = wsSchema.Cells(1, wsSchema.Columns.Count).End(xlToLeft).Column
+
+    ' 헤더 복사 (I, J 열은 그대로 두고 나머지는 Schema 헤더 사용)
+    wsSchema.Rows(1).Copy wsResult.Rows(1)
+
+    outRow = 2
+
+    ' Schema 각 행에 대해 처리
+    For i = 2 To lastRowSchema
+        menuCode = Trim(wsSchema.Cells(i, colMenuSchema).Value)
+        matched = False
+
+        For j = 2 To lastRowAccess
+            If Trim(wsAccess.Cells(j, colMenuAccess).Value) = menuCode And menuCode <> "" Then
+                matched = True
+                ' Schema 행 전체 복사
+                wsSchema.Rows(i).Copy
+                wsResult.Rows(outRow).PasteSpecial xlPasteAll
+                ' I열(권한그룹코드), J열(권한그룹명) 덮어쓰기
+                wsResult.Cells(outRow, colGroupCode).Value = wsAccess.Cells(j, colGroupCode).Value
+                wsResult.Cells(outRow, colGroupName).Value = wsAccess.Cells(j, colGroupName).Value
+                outRow = outRow + 1
+            End If
+        Next j
+
+        ' 매핑되는 권한그룹이 없는 경우 원본 행 그대로 1줄 유지
+        If Not matched Then
+            wsSchema.Rows(i).Copy
+            wsResult.Rows(outRow).PasteSpecial xlPasteAll
+            outRow = outRow + 1
+        End If
+    Next i
+
+    Application.CutCopyMode = False
+    wsResult.Columns.AutoFit
+    MsgBox "완료! 총 " & (outRow - 2) & "개 행이 생성되었습니다.", vbInformation
+End Sub
+
+Function FindColumn(ws As Worksheet, headerName As String) As Integer
+    Dim lastCol As Integer, k As Integer
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    FindColumn = 0
+    For k = 1 To lastCol
+        If Trim(ws.Cells(1, k).Value) = headerName Then
+            FindColumn = k
+            Exit Function
+        End If
+    Next k
+End Function
