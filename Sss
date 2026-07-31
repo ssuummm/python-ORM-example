@@ -1,0 +1,110 @@
+Sub DuplicateRowsByH()
+    Dim ws As Worksheet
+    Dim scopeCol As Long, lastCol As Long, c As Long
+    
+    Set ws = ActiveSheet
+    
+    ' 1행에서 'scope_1' 헤더가 있는 열 찾기
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    scopeCol = 0
+    For c = 1 To lastCol
+        If Trim(ws.Cells(1, c).Value) = "scope_1" Then
+            scopeCol = c
+            Exit For
+        End If
+    Next c
+    
+    If scopeCol = 0 Then
+        MsgBox "1행에서 'scope_1' 헤더를 찾을 수 없습니다. 헤더 위치를 확인해주세요."
+        Exit Sub
+    End If
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    ' 1) TB_HYPATH_SALES_ACTUAL -> 22개 복제
+    DuplicateForValue ws, "TB_HYPATH_SALES_ACTUAL", Array( _
+        "TB_HYPATH_SALES_ACTUAL_SKHYH", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYT", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYSI", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYS", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYJ", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYID", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYI", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYD", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYCS", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYA", _
+        "TB_HYPATH_SALES_ACTUAL_SHM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYH_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYT_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYSI_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYS_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYJ_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYID_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYI_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYD_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYCS_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SKHYA_HBM", _
+        "TB_HYPATH_SALES_ACTUAL_SHM_HBM" _
+    ), scopeCol
+    
+    ' 2) TB_HYPATH_SALES_EXEC_PLAN -> 22개 복제
+    DuplicateForValue ws, "TB_HYPATH_SALES_EXEC_PLAN", Array( _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYH", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYT", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYSI", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYS", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYJ", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYID", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYI", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYD", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYCS", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYA", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SHM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYH_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYT_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYSI_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYS_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYJ_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYID_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYI_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYD_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYCS_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SKHYA_HBM", _
+        "TB_HYPATH_SALES_EXEC_PLAN_SHM_HBM" _
+    ), scopeCol
+    
+    ' 3) TB_HYPATH_SOM_PLAN -> 1개 복제
+    DuplicateForValue ws, "TB_HYPATH_SOM_PLAN", Array("TB_HYPATH_SOM_PLAN_HBM"), scopeCol
+    
+    ' 4) TB_HYPATH_SNC_PLAN -> 1개 복제
+    DuplicateForValue ws, "TB_HYPATH_SNC_PLAN", Array("TB_HYPATH_SNC_PLAN_HBM"), scopeCol
+    
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    
+    MsgBox "복제가 완료되었습니다."
+End Sub
+
+Private Sub DuplicateForValue(ws As Worksheet, targetVal As String, scopeValues As Variant, scopeCol As Long)
+    Dim r As Long, lastRow As Long
+    Dim n As Long, i As Long
+    
+    lastRow = ws.Cells(ws.Rows.Count, "H").End(xlUp).Row
+    
+    ' 아래에서 위로 탐색해야 행 삽입 시 인덱스가 꼬이지 않음
+    For r = lastRow To 2 Step -1
+        If Trim(ws.Cells(r, "H").Value) = targetVal Then
+            n = UBound(scopeValues) - LBound(scopeValues) + 1
+            
+            ' 원본 행 바로 아래에 n개 행 삽입
+            ws.Rows(r + 1 & ":" & r + n).Insert Shift:=xlDown
+            
+            ' 원본 행을 복제하고 scope_1 값 채우기
+            For i = 0 To n - 1
+                ws.Rows(r).Copy ws.Rows(r + 1 + i)
+                ws.Cells(r + 1 + i, scopeCol).Value = scopeValues(LBound(scopeValues) + i)
+            Next i
+        End If
+    Next r
+End Sub
