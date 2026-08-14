@@ -1,0 +1,55 @@
+# ── deny 메시지 빌더 ──────────────────────────────────────────────────────────
+
+def _denied_columns_by_table(body) -> dict[str, list[str]]:
+    """테이블별로 '권한 없어 NULL 처리된 컬럼' 목록을 계산.
+
+    - allowed_columns == ['*'] (전체 허용) 테이블은 제외.
+    - all_columns - allowed_columns 결과가 빈 테이블(명시적으로 전체 컬럼을
+      나열했지만 결과적으로 전체 허용인 경우)도 제외.
+      → 이 필터링 덕분에, "권한이 있는 테이블"은 애초에 결과 dict 에 등장하지
+        않는다 (개선점 3의 원인 제거).
+    """
+    result: dict[str, list[str]] = {}
+    for table_name, tp in body.policy.get("tables", {}).items():
+        allowed = tp.get("allowed_columns", [])
+        if allowed == ["*"]:
+            continue
+        all_cols = tp.get("all_columns", [])
+        denied_cols = sorted(set(all_cols) - set(allowed))
+        if not denied_cols:
+            continue
+        result[table_name] = denied_cols
+    return result
+
+
+def _build_column_deny_message(body) -> str:
+    """테이블별 컬럼 권한 제한 안내문.
+
+    형식: "TABLE_A: COL1, COL2 컬럼은 권한이 없어 NULL로 제공됩니다. | TABLE_B: ..."
+    - 테이블명을 명시해 어떤 테이블의 어떤 컬럼이 막혔는지 바로 식별 가능 (개선점 1).
+    - 제한이 있는 테이블만 등장하므로, 전체 허용된 테이블에는 메시지가 붙지 않음 (개선점 3).
+    """
+    by_table = _denied_columns_by_table(body)
+    if not by_table:
+        return ""
+    parts = [
+        f"{table_name}: {', '.join(cols)} 컬럼은 권한이 없어 NULL로 제공됩니다."
+        for table_name, cols in by_table.items()
+    ]
+    return " | ".join(parts)
+
+
+def _build_row_deny_message(body) -> str:
+    """테이블별 row filter 적용 안내문.
+
+    형식: "TABLE_A: <filter_expr> | TABLE_B: <filter_expr>"
+    - row filter 는 테이블마다 다른 조건일 수 있으므로 테이블명을 반드시 표기.
+    """
+    parts = [
+        f"{table_name}: {tp['row_filter']}"
+        for table_name, tp in body.policy.get("tables", {}).items()
+        if tp.get("row_filter")
+    ]
+    if not parts:
+        return ""
+    return " | ".join(f"{p} 조건으로 행이 제한됩니다." if False else p for p in parts)
