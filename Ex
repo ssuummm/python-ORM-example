@@ -28,10 +28,12 @@ def _secured_subquery_sql(
         inner += f" {table.name}"
     return inner
 
-def _build_column_deny_message(body) -> str:
-    """allowed_columns=['*'] 가 아닌 테이블의 차단 컬럼을 테이블별로 안내."""
+def _build_column_deny_message(body, referenced: set[str]) -> str:
+    """allowed_columns=['*'] 가 아닌, 이번 SQL 이 실제 참조한 테이블의 차단 컬럼을 테이블별로 안내."""
     parts: list[str] = []
     for table_name, tp in body.policy.get("tables", {}).items():
+        if table_name.upper() not in referenced:
+            continue
         allowed = tp.get("allowed_columns", [])
         if allowed == ["*"]:
             continue
@@ -44,11 +46,11 @@ def _build_column_deny_message(body) -> str:
         )
     return " | ".join(parts)
 
-def _build_row_deny_message(body) -> str:
-    """적용된 row filter 조건을 테이블별로 안내."""
+def _build_row_deny_message(body, referenced: set[str]) -> str:
+    """이번 SQL 이 실제 참조한 테이블에 한해 적용된 row filter 조건을 테이블별로 안내."""
     parts = [
         f"{table_name} 테이블: 조건({tp['row_filter']}) 에 해당하는 행만 조회됩니다."
         for table_name, tp in body.policy.get("tables", {}).items()
-        if tp.get("row_filter")
+        if table_name.upper() in referenced and tp.get("row_filter")
     ]
     return " | ".join(parts)
