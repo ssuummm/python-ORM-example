@@ -27,3 +27,28 @@ def _secured_subquery_sql(
     if table.args.get("alias") is None:
         inner += f" {table.name}"
     return inner
+
+def _build_column_deny_message(body) -> str:
+    """allowed_columns=['*'] 가 아닌 테이블의 차단 컬럼을 테이블별로 안내."""
+    parts: list[str] = []
+    for table_name, tp in body.policy.get("tables", {}).items():
+        allowed = tp.get("allowed_columns", [])
+        if allowed == ["*"]:
+            continue
+        all_cols = tp.get("all_columns", [])
+        denied_cols = sorted(set(all_cols) - set(allowed))
+        if not denied_cols:
+            continue
+        parts.append(
+            f"{table_name} 테이블: {', '.join(denied_cols)} 컬럼은 권한이 없습니다."
+        )
+    return " | ".join(parts)
+
+def _build_row_deny_message(body) -> str:
+    """적용된 row filter 조건을 테이블별로 안내."""
+    parts = [
+        f"{table_name} 테이블: 조건({tp['row_filter']}) 에 해당하는 행만 조회됩니다."
+        for table_name, tp in body.policy.get("tables", {}).items()
+        if tp.get("row_filter")
+    ]
+    return " | ".join(parts)
