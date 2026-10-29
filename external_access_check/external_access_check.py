@@ -499,8 +499,11 @@ def main():
     args = ap.parse_args()
 
     Ctx.timeout = args.timeout
-    Ctx.ssl_ctx = ssl.create_default_context(cafile=args.ca_bundle) if args.ca_bundle \
-        else ssl.create_default_context()
+    # 시스템 기본 CA는 유지하고 사내 CA만 추가로 신뢰한다.
+    # (cafile= 로 넘기면 기본 CA가 빠져서, 복호화 예외 도메인이 오히려 실패한다)
+    Ctx.ssl_ctx = ssl.create_default_context()
+    if args.ca_bundle:
+        Ctx.ssl_ctx.load_verify_locations(cafile=args.ca_bundle)
     scope = {s.strip().lower() for s in args.only.split(",")}
 
     log("=" * 72)
