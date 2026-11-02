@@ -28,10 +28,18 @@ from src.loader import load_keywords, load_tables
 from src.writer import ResultWriter, load_done_ids, write_prompts, write_summary
 
 ROOT = Path(__file__).parent
-SAMPLE = ROOT / "sample_data"
+DATA = ROOT / "data"
+DEFAULT_TABLES = DATA / "datalake_crawling_result.txt"
+DEFAULT_GLOBAL_KW = DATA / "global_keywords.txt"
+DEFAULT_SYSTEM_KW = DATA / "system_keywords.txt"
 
 
 def cmd_run(a: argparse.Namespace) -> int:
+    missing = [p for p in (a.tables, a.global_keywords, a.system_keywords) if not Path(p).exists()]
+    if missing:
+        print("입력 파일이 없습니다:\n  " + "\n  ".join(missing))
+        print("data/ 폴더에 datalake_crawling_result.txt, global_keywords.txt, system_keywords.txt를 넣어주세요.")
+        return 1
     s = load_settings(provider=a.provider, max_columns_per_call=a.max_columns,
                       send_raw_values=True if a.send_raw_values else None)
     gk = load_keywords(a.global_keywords, "global")
@@ -75,14 +83,19 @@ def cmd_run(a: argparse.Namespace) -> int:
 
 
 def main(argv=None) -> int:
+    # 하위 명령 없이 `python app.py [옵션]`으로 실행하면 run으로 처리
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if not argv or argv[0] not in ("run", "-h", "--help"):
+        argv = ["run", *argv]
+
     p = argparse.ArgumentParser(description="Data Lake 민감 테이블 식별 PoC")
-    p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    r = sub.add_parser("run", help="민감 테이블 판단 실행")
-    r.add_argument("--tables", default=str(SAMPLE / "tables.json"), help="테이블 메타데이터 (.json 또는 flat .csv)")
-    r.add_argument("--global-keywords", default=str(SAMPLE / "global_keywords.csv"))
-    r.add_argument("--system-keywords", default=str(SAMPLE / "system_keywords.csv"))
+    r = sub.add_parser("run", help="민감 테이블 판단 실행 (기본 명령)")
+    r.add_argument("-v", "--verbose", action="store_true")
+    r.add_argument("--tables", default=str(DEFAULT_TABLES), help="테이블 메타데이터 (기본: data/datalake_crawling_result.txt)")
+    r.add_argument("--global-keywords", default=str(DEFAULT_GLOBAL_KW), help="기본: data/global_keywords.txt")
+    r.add_argument("--system-keywords", default=str(DEFAULT_SYSTEM_KW), help="기본: data/system_keywords.txt")
     r.add_argument("--out-dir", default=str(ROOT / "output"))
     r.add_argument("--provider", choices=["mock", "openai", "anthropic"], default=None,
                    help="미지정 시 LLM_PROVIDER 환경변수(기본 mock)")
