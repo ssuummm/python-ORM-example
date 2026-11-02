@@ -1,0 +1,6 @@
+keyword_id,system_code,keyword,aliases,category,level,description
+S-MES-001,MES,수율,양품률|YIELD|YLD,공정,HIGH,제품/LOT/웨이퍼별 수율 값
+S-MES-002,MES,불량,DEFECT|불량률,품질,MEDIUM,불량 유형·불량률
+S-FAB-001,FAB,레시피,공정조건|RECIPE|RCP,공정기술,HIGH,설비 공정 레시피 및 파라미터 설정값
+S-HR-001,HR,징계,DISCIPLINE,인사,HIGH,징계 이력
+S-PMS-001,PMS,신제품,신제품개발|NPI,개발,HIGH,신제품 개발 과제 정보

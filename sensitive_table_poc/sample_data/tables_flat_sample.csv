@@ -1,0 +1,15 @@
+﻿system_code,schema_name,table_name,table_desc,column_name,column_desc,std_term,std_term_desc,data_type,sample_values
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,EMP_NO,사번,사원번호,임직원 고유 식별 번호,VARCHAR(10),A1023456|A1034871|B2001934
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,EMP_NM,사원명,성명,개인의 이름,VARCHAR(50),김민수|이서연|박지훈
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,RRN_ENC,주민등록번호(암호화),주민등록번호,,VARCHAR(256),kJ8sd9Fq2LmZx0PqWe7YtR4uI1oP3aSd==|Zx9Lm2Qw8Er5Ty1Ui4Op7As0Df3Gh6Jk==
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,DEPT_CD,부서코드,부서코드,조직 부서 식별 코드,VARCHAR(8),D1100|D2300
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,PAY_YM,지급년월,지급년월,급여 지급 기준 년월(YYYYMM),CHAR(6),202609|202610
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,SAL_AMT,월 기본급,기본급액,월 기본급 금액(원),"DECIMAL(15,0)",5200000|6830000|4710000
+HR,dl_hr,TB_EMP_SALARY,임직원 월별 급여 지급 내역,BONUS_AMT,상여금,상여금액,,"DECIMAL(15,0)",0|3500000|12000000
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,LOT_ID,LOT 식별자,LOT번호,,VARCHAR(20),L26A00123|L26A00124
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,FAB_CD,FAB 코드,공장코드,,VARCHAR(8),FAB1|FAB2
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,PROD_CD,제품코드,제품코드,,VARCHAR(20),DR5-16G-A|NF7-1T-B
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,STEP_ID,공정 STEP,공정단계ID,,VARCHAR(20),ETCH_0410|CMP_0520
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,YLD_RT,,,,"DECIMAL(5,2)",92.31|88.07|95.60
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,GOOD_DIE_CNT,양품 다이 수,양품수량,,INT,1834|1790
+MES,dl_mes,TB_LOT_YIELD,LOT별 STEP 수율 실적,CUST_CD,고객사 코드,고객코드,거래 고객사 식별 코드,VARCHAR(10),C0012|C0045

@@ -1,0 +1,8 @@
+﻿table_id,system_code,decision,sensitivity_level,confidence,sensitive_columns,row_conditions,matched_keywords,needs_review,review_reasons,reason,error
+dl_hr.TB_EMP_SALARY,HR,sensitive,HIGH,0.75,EMP_NM | RRN_ENC | PAY_YM | SAL_AMT | BONUS_AMT,,G-001:주민등록번호 | G-002:급여 | G-005:성명,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_mes.TB_LOT_YIELD,MES,sensitive,HIGH,0.75,YLD_RT | CUST_CD,,G-006:고객사 | S-MES-001:수율,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_fab.TB_RCP_PARAM,FAB,sensitive,HIGH,0.75,RCP_ID,,S-FAB-001:레시피,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_com.TB_CMN_CODE,COM,sensitive,HIGH,0.75,CODE_GRP_ID,,G-006:고객사,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_fab.TB_EQP_MASTER,FAB,sensitive,HIGH,0.75,COST_CENTER_CD,,G-007:원가,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_pms.TB_PROJECT_MASTER,PMS,sensitive,HIGH,0.75,PJT_TYPE_CD | SEC_GRADE_CD,,G-008:보안등급 | S-PMS-001:신제품,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,
+dl_com.TB_USER_ACCOUNT,COM,sensitive,HIGH,0.75,USER_NM | EMAIL_ADDR | MOBILE_NO | PWD_HASH | PWD_CHG_DT,,G-003:비밀번호 | G-004:연락처 | G-005:성명,False,,[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.,

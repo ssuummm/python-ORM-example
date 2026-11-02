@@ -1,0 +1,100 @@
+[
+  {
+    "system_code": "HR",
+    "schema_name": "dl_hr",
+    "table_name": "TB_EMP_SALARY",
+    "table_desc": "임직원 월별 급여 지급 내역",
+    "columns": [
+      {"column_name": "EMP_NO", "column_desc": "사번", "std_term": "사원번호", "std_term_desc": "임직원 고유 식별 번호", "data_type": "VARCHAR(10)", "sample_values": ["A1023456", "A1034871", "B2001934"]},
+      {"column_name": "EMP_NM", "column_desc": "사원명", "std_term": "성명", "std_term_desc": "개인의 이름", "data_type": "VARCHAR(50)", "sample_values": ["김민수", "이서연", "박지훈"]},
+      {"column_name": "RRN_ENC", "column_desc": "주민등록번호(암호화)", "std_term": "주민등록번호", "std_term_desc": "", "data_type": "VARCHAR(256)", "sample_values": ["kJ8sd9Fq2LmZx0PqWe7YtR4uI1oP3aSd==", "Zx9Lm2Qw8Er5Ty1Ui4Op7As0Df3Gh6Jk=="]},
+      {"column_name": "DEPT_CD", "column_desc": "부서코드", "std_term": "부서코드", "std_term_desc": "조직 부서 식별 코드", "data_type": "VARCHAR(8)", "sample_values": ["D1100", "D2300"]},
+      {"column_name": "PAY_YM", "column_desc": "지급년월", "std_term": "지급년월", "std_term_desc": "급여 지급 기준 년월(YYYYMM)", "data_type": "CHAR(6)", "sample_values": ["202609", "202610"]},
+      {"column_name": "SAL_AMT", "column_desc": "월 기본급", "std_term": "기본급액", "std_term_desc": "월 기본급 금액(원)", "data_type": "DECIMAL(15,0)", "sample_values": ["5200000", "6830000", "4710000"]},
+      {"column_name": "BONUS_AMT", "column_desc": "상여금", "std_term": "상여금액", "std_term_desc": "", "data_type": "DECIMAL(15,0)", "sample_values": ["0", "3500000", "12000000"]}
+    ]
+  },
+  {
+    "system_code": "MES",
+    "schema_name": "dl_mes",
+    "table_name": "TB_LOT_YIELD",
+    "table_desc": "LOT별 STEP 수율 실적",
+    "columns": [
+      {"column_name": "LOT_ID", "column_desc": "LOT 식별자", "std_term": "LOT번호", "data_type": "VARCHAR(20)", "sample_values": ["L26A00123", "L26A00124"]},
+      {"column_name": "FAB_CD", "column_desc": "FAB 코드", "std_term": "공장코드", "data_type": "VARCHAR(8)", "sample_values": ["FAB1", "FAB2"]},
+      {"column_name": "PROD_CD", "column_desc": "제품코드", "std_term": "제품코드", "data_type": "VARCHAR(20)", "sample_values": ["DR5-16G-A", "NF7-1T-B"]},
+      {"column_name": "STEP_ID", "column_desc": "공정 STEP", "std_term": "공정단계ID", "data_type": "VARCHAR(20)", "sample_values": ["ETCH_0410", "CMP_0520"]},
+      {"column_name": "YLD_RT", "column_desc": "", "std_term": "", "data_type": "DECIMAL(5,2)", "sample_values": ["92.31", "88.07", "95.60"]},
+      {"column_name": "GOOD_DIE_CNT", "column_desc": "양품 다이 수", "std_term": "양품수량", "data_type": "INT", "sample_values": ["1834", "1790"]},
+      {"column_name": "CUST_CD", "column_desc": "고객사 코드", "std_term": "고객코드", "std_term_desc": "거래 고객사 식별 코드", "data_type": "VARCHAR(10)", "sample_values": ["C0012", "C0045"]}
+    ]
+  },
+  {
+    "system_code": "FAB",
+    "schema_name": "dl_fab",
+    "table_name": "TB_RCP_PARAM",
+    "table_desc": "설비별 공정 조건 파라미터",
+    "columns": [
+      {"column_name": "RCP_ID", "column_desc": "레시피 ID", "std_term": "레시피ID", "data_type": "VARCHAR(40)", "sample_values": ["ETCH_PLY_V12", "CVD_OX_V7"]},
+      {"column_name": "EQP_ID", "column_desc": "설비 ID", "std_term": "설비ID", "data_type": "VARCHAR(20)", "sample_values": ["EQ-ET-0101", "EQ-CV-0203"]},
+      {"column_name": "PARAM_NM", "column_desc": "파라미터명", "std_term": "파라미터명", "data_type": "VARCHAR(50)", "sample_values": ["RF_POWER", "CHAMBER_PRESSURE", "GAS_FLOW_CF4"]},
+      {"column_name": "PARAM_VAL", "column_desc": "설정값", "std_term": "설정값", "data_type": "VARCHAR(50)", "sample_values": ["1250", "35.5", "80"]},
+      {"column_name": "UPD_DT", "column_desc": "수정일시", "std_term": "수정일시", "data_type": "DATETIME", "sample_values": ["2026-10-28 13:22:01"]}
+    ]
+  },
+  {
+    "system_code": "COM",
+    "schema_name": "dl_com",
+    "table_name": "TB_CMN_CODE",
+    "table_desc": "공통 코드 정의",
+    "columns": [
+      {"column_name": "CODE_GRP_ID", "column_desc": "코드 그룹 ID", "std_term": "코드그룹ID", "data_type": "VARCHAR(30)", "sample_values": ["CUST_TYPE", "EQP_STATUS", "LOT_TYPE"]},
+      {"column_name": "CODE_ID", "column_desc": "코드 ID", "std_term": "코드ID", "data_type": "VARCHAR(30)", "sample_values": ["01", "02", "RUN"]},
+      {"column_name": "CODE_NM", "column_desc": "코드명", "std_term": "코드명", "data_type": "VARCHAR(100)", "sample_values": ["양산", "개발", "가동"]},
+      {"column_name": "SORT_SEQ", "column_desc": "정렬순서", "std_term": "정렬순서", "data_type": "INT", "sample_values": ["1", "2"]},
+      {"column_name": "USE_YN", "column_desc": "사용여부", "std_term": "사용여부", "data_type": "CHAR(1)", "sample_values": ["Y", "N"]}
+    ]
+  },
+  {
+    "system_code": "FAB",
+    "schema_name": "dl_fab",
+    "table_name": "TB_EQP_MASTER",
+    "table_desc": "설비 기준 정보",
+    "columns": [
+      {"column_name": "EQP_ID", "column_desc": "설비 ID", "std_term": "설비ID", "data_type": "VARCHAR(20)", "sample_values": ["EQ-ET-0101", "EQ-CV-0203"]},
+      {"column_name": "EQP_NM", "column_desc": "설비명", "std_term": "설비명", "data_type": "VARCHAR(100)", "sample_values": ["ETCH #1", "CVD #3"]},
+      {"column_name": "EQP_MODEL_NM", "column_desc": "설비 모델명", "std_term": "모델명", "data_type": "VARCHAR(100)", "sample_values": ["MDL-E300", "MDL-C450"]},
+      {"column_name": "COST_CENTER_CD", "column_desc": "설비 관리 코스트센터 코드", "std_term": "코스트센터코드", "std_term_desc": "비용 집계 단위 조직 코드", "data_type": "VARCHAR(10)", "sample_values": ["CC1200", "CC1310"]},
+      {"column_name": "INSTALL_DT", "column_desc": "설치일자", "std_term": "설치일자", "data_type": "DATE", "sample_values": ["2023-04-11", "2024-09-02"]}
+    ]
+  },
+  {
+    "system_code": "PMS",
+    "schema_name": "dl_pms",
+    "table_name": "TB_PROJECT_MASTER",
+    "table_desc": "연구개발 과제 기준 정보",
+    "columns": [
+      {"column_name": "PJT_CD", "column_desc": "과제 코드", "std_term": "과제코드", "data_type": "VARCHAR(20)", "sample_values": ["P26-0012", "P26-0031", "P25-0410"]},
+      {"column_name": "PJT_NM", "column_desc": "과제명", "std_term": "과제명", "data_type": "VARCHAR(200)", "sample_values": ["차세대 DRAM 셀 구조 개발", "사내 그룹웨어 고도화", "CMP 공정 개선"]},
+      {"column_name": "PJT_TYPE_CD", "column_desc": "과제 유형", "std_term": "과제유형코드", "std_term_desc": "NPI:신제품개발, PI:공정개선, IT:IT과제", "data_type": "VARCHAR(10)", "sample_values": ["NPI", "IT", "PI"]},
+      {"column_name": "SEC_GRADE_CD", "column_desc": "과제 보안등급", "std_term": "보안등급코드", "std_term_desc": "S:극비, A:대외비, B:사내한정, C:일반", "data_type": "CHAR(1)", "sample_values": ["S", "C", "A", "B"]},
+      {"column_name": "PM_EMP_NO", "column_desc": "과제 책임자 사번", "std_term": "사원번호", "data_type": "VARCHAR(10)", "sample_values": ["A1023456", "A1102938"]},
+      {"column_name": "START_DT", "column_desc": "시작일자", "std_term": "시작일자", "data_type": "DATE", "sample_values": ["2026-01-02", "2026-03-15"]}
+    ]
+  },
+  {
+    "system_code": "COM",
+    "schema_name": "dl_com",
+    "table_name": "TB_USER_ACCOUNT",
+    "table_desc": "시스템 사용자 계정",
+    "columns": [
+      {"column_name": "USER_ID", "column_desc": "사용자 ID", "std_term": "사용자ID", "data_type": "VARCHAR(30)", "sample_values": ["mskim", "syl.lee"]},
+      {"column_name": "USER_NM", "column_desc": "사용자명", "std_term": "성명", "data_type": "VARCHAR(50)", "sample_values": ["김민수", "이서연"]},
+      {"column_name": "EMAIL_ADDR", "column_desc": "이메일 주소", "std_term": "이메일주소", "data_type": "VARCHAR(100)", "sample_values": ["mskim@example.com", "syl.lee@example.com"]},
+      {"column_name": "MOBILE_NO", "column_desc": "휴대폰번호", "std_term": "휴대전화번호", "data_type": "VARCHAR(20)", "sample_values": ["010-1234-5678", "010-9876-5432"]},
+      {"column_name": "PWD_HASH", "column_desc": "비밀번호 해시", "std_term": "비밀번호", "data_type": "VARCHAR(256)", "sample_values": ["5f4dcc3b5aa765d61d8327deb882cf99a1b2c3d4e5f6a7b8"]},
+      {"column_name": "PWD_CHG_DT", "column_desc": "비밀번호 변경일자", "std_term": "변경일자", "data_type": "DATE", "sample_values": ["2026-09-01", "2026-07-22"]},
+      {"column_name": "LAST_LOGIN_DT", "column_desc": "최종 로그인 일시", "std_term": "최종로그인일시", "data_type": "DATETIME", "sample_values": ["2026-11-01 08:51:22"]}
+    ]
+  }
+]
