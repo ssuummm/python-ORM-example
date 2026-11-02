@@ -1,78 +1,81 @@
-"""키워드 사전과 테이블 메타데이터 로더.
+"""입력 txt 파일을 읽는 모듈.
 
-키워드 CSV 컬럼:
-  keyword_id, keyword, aliases(| 구분), category, level(HIGH/MEDIUM/LOW), description, [system_code]
+입력 파일은 모두 Excel에서 복사해 붙여넣은 txt(탭으로 구분)라고 가정한다.
 
-테이블 메타데이터:
-  (a) JSON  : TableMeta 리스트 (sample_data/tables.json 참고)
-  (b) CSV   : 컬럼 1행 단위 flat 형식 (메타데이터 관리 시스템 export 형태)
-      system_code, schema_name, table_name, table_desc, column_name, column_desc,
-      std_term, std_term_desc, data_type, sample_values(| 구분)
+- 키워드 파일 열: keyword, source, source_detail
+- 크롤링 결과 파일 열: table_name, table_desc, sys_cd, schema, column_name, column_desc,
+                      equivalent_columns, std_term, std_term_desc, data_type
 """
-from __future__ import annotations
-
-import csv
-import json
-from pathlib import Path
+import pandas as pd
 
 from .models import ColumnMeta, Keyword, TableMeta
 
-
-def _split(v: str | None) -> list[str]:
-    return [x.strip() for x in (v or "").split("|") if x.strip()]
-
-
-def load_keywords(path: str | Path, source: str) -> list[Keyword]:
-    out: list[Keyword] = []
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
-            if not (row.get("keyword_id") and row.get("keyword")):
-                continue
-            out.append(Keyword(
-                keyword_id=row["keyword_id"].strip(),
-                keyword=row["keyword"].strip(),
-                aliases=_split(row.get("aliases")),
-                category=(row.get("category") or "").strip(),
-                level=(row.get("level") or "HIGH").strip().upper(),
-                description=(row.get("description") or "").strip(),
-                source=source,
-                system_code=(row.get("system_code") or "").strip() or None,
-            ))
-    ids = [k.keyword_id for k in out]
-    dup = {i for i in ids if ids.count(i) > 1}
-    if dup:
-        raise ValueError(f"중복 keyword_id: {sorted(dup)}")
-    return out
+# 사내 열 이름을 코드에서 쓰는 이름으로 바꾼다.
+COLUMN_RENAME = {
+    "sys_cd": "system_code",
+    "schema": "schema_name",
+}
 
 
-def load_tables(path: str | Path) -> list[TableMeta]:
-    path = Path(path)
-    if path.suffix.lower() == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return [TableMeta.model_validate(t) for t in data]
-    if path.suffix.lower() == ".csv":
-        return _load_flat_csv(path)
-    raise ValueError(f"지원하지 않는 형식: {path.suffix} (json/csv)")
+def read_txt(path: str) -> pd.DataFrame:
+    """탭으로 구분된 txt 파일을 DataFrame으로 읽는다."""
+    # keep_default_na=False: 빈 칸을 NaN이 아닌 빈 문자열("")로 읽는다.
+    try:
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        # 메모장에서 ANSI로 저장한 한글 파일은 cp949 인코딩이다.
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, encoding="cp949")
+
+    df.columns = [col.strip().lower() for col in df.columns]
+    df = df.rename(columns=COLUMN_RENAME)
+
+    # 모든 칸의 앞뒤 공백 제거
+    for col in df.columns:
+        df[col] = df[col].str.strip()
+    return df
 
 
-def _load_flat_csv(path: Path) -> list[TableMeta]:
-    tables: dict[tuple, TableMeta] = {}
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
-            key = (row["system_code"].strip(), (row.get("schema_name") or "").strip(), row["table_name"].strip())
-            t = tables.get(key)
-            if t is None:
-                t = tables[key] = TableMeta(
-                    system_code=key[0], schema_name=key[1], table_name=key[2],
-                    table_desc=(row.get("table_desc") or "").strip(),
-                )
-            if (row.get("column_name") or "").strip():
-                t.columns.append(ColumnMeta(
-                    column_name=row["column_name"].strip(),
-                    column_desc=(row.get("column_desc") or "").strip(),
-                    std_term=(row.get("std_term") or "").strip(),
-                    std_term_desc=(row.get("std_term_desc") or "").strip(),
-                    data_type=(row.get("data_type") or "").strip(),
-                    sample_values=_split(row.get("sample_values")),
-                ))
+def load_keywords(path: str, source: str) -> list[Keyword]:
+    """키워드 파일을 읽는다. source는 "global"(전사) 또는 "system"(시스템별)."""
+    df = read_txt(path)
+    df = df[df["keyword"] != ""]                  # 키워드가 빈 행 제거
+    df = df.drop_duplicates(subset=["keyword"])   # 같은 키워드 중복 제거
+
+    prefix = "G" if source == "global" else "S"
+    keywords = []
+    for number, row in enumerate(df.to_dict("records"), start=1):
+        keywords.append(Keyword(
+            keyword_id=f"{prefix}-{number:03d}",  # 예: G-001, S-001
+            keyword=row["keyword"],
+            description=f"출처: {row['source']} / {row['source_detail']}",
+            source=source,
+        ))
+    return keywords
+
+
+def load_tables(path: str) -> list[TableMeta]:
+    """크롤링 결과 파일을 읽는다. 파일은 컬럼 1개당 1행이므로 테이블 단위로 묶는다."""
+    df = read_txt(path)
+    tables = {}  # key: "스키마.테이블명", value: TableMeta
+
+    for row in df.to_dict("records"):
+        if row["table_name"] == "" or row["column_name"] == "":
+            continue  # 빈 행 건너뜀
+
+        table_key = f"{row['schema_name']}.{row['table_name']}"
+        if table_key not in tables:
+            tables[table_key] = TableMeta(
+                system_code=row["system_code"],
+                schema_name=row["schema_name"],
+                table_name=row["table_name"],
+                table_desc=row["table_desc"],
+            )
+
+        tables[table_key].columns.append(ColumnMeta(
+            column_name=row["column_name"],
+            column_desc=row["column_desc"],
+            std_term=row["std_term"],
+            std_term_desc=row["std_term_desc"],
+            data_type=row["data_type"],
+        ))
     return list(tables.values())
