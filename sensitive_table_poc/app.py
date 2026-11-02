@@ -11,14 +11,10 @@
   # 3) 사내 LLM Gateway(OpenAI 호환)로 실행
   export LLM_BASE_URL=https://llm-gw.example.internal/v1 LLM_MODEL=<model> LLM_API_KEY=<key>
   python app.py run --provider openai --workers 4
-
-  # 4) 정답셋 대비 평가
-  python app.py eval
 """
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections import Counter
@@ -27,7 +23,6 @@ from pathlib import Path
 
 from src.classifier import SensitiveTableClassifier
 from src.config import load_settings
-from src.evaluate import evaluate, print_report
 from src.llm_client import create_client
 from src.loader import load_keywords, load_tables
 from src.writer import ResultWriter, load_done_ids, write_prompts, write_summary
@@ -79,15 +74,6 @@ def cmd_run(a: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_eval(a: argparse.Namespace) -> int:
-    rep = evaluate(Path(a.results), Path(a.labels))
-    print_report(rep)
-    out = Path(a.results).parent / "eval_report.json"
-    out.write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n리포트: {out}")
-    return 0
-
-
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Data Lake 민감 테이블 식별 PoC")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -110,10 +96,6 @@ def main(argv=None) -> int:
     r.add_argument("--send-raw-values", action="store_true", help="[확인 필요] 샘플 값 마스킹 해제")
     r.set_defaults(func=cmd_run)
 
-    e = sub.add_parser("eval", help="정답셋 대비 평가")
-    e.add_argument("--results", default=str(ROOT / "output" / "results.jsonl"))
-    e.add_argument("--labels", default=str(SAMPLE / "labels.csv"))
-    e.set_defaults(func=cmd_eval)
 
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,

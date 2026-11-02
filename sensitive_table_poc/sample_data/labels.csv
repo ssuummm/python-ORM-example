@@ -1,8 +1,0 @@
-table_id,decision,sensitive_columns,note
-dl_hr.TB_EMP_SALARY,sensitive,EMP_NM|RRN_ENC|SAL_AMT|BONUS_AMT,"급여·주민번호(암호화)·성명. EMP_NO, PAY_YM은 비민감"
-dl_mes.TB_LOT_YIELD,sensitive,YLD_RT|CUST_CD,"YLD_RT는 설명 없이 약어로만 수율 식별되는 케이스"
-dl_fab.TB_RCP_PARAM,sensitive,RCP_ID|PARAM_VAL,"레시피 파라미터 설정값. PARAM_NM 포함 여부는 고객사 기준 확인 필요"
-dl_com.TB_CMN_CODE,non-sensitive,,"CODE_GRP_ID 값 CUST_TYPE이 키워드와 글자만 겹치는 오탐 유도 케이스"
-dl_fab.TB_EQP_MASTER,non-sensitive,,"COST_CENTER_CD가 원가(COST)와 글자만 겹치는 오탐 유도 케이스"
-dl_pms.TB_PROJECT_MASTER,sensitive,SEC_GRADE_CD|PJT_TYPE_CD,"row 조건: SEC_GRADE_CD IN ('S','A') / PJT_TYPE_CD = 'NPI'"
-dl_com.TB_USER_ACCOUNT,sensitive,USER_NM|EMAIL_ADDR|MOBILE_NO|PWD_HASH,"PWD_CHG_DT는 비밀번호 변경일자로 비민감"

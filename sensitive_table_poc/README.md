@@ -5,7 +5,7 @@
 
 ## 구조
 ```
-app.py                      CLI (run / eval)
+app.py                      CLI (run)
 src/
   config.py                 설정 (환경변수 + CLI)
   models.py                 입력·LLM 출력·최종 결과 스키마 (pydantic)
@@ -19,8 +19,7 @@ src/
   classifier.py             테이블 1건 처리 오케스트레이션 (재시도 포함)
   postprocess.py            병합·환각 제거·row 조건 검증·검토 대상 판정
   writer.py                 results.jsonl / summary.csv / 프롬프트 덤프
-  evaluate.py               정답셋 대비 Precision / Recall
-sample_data/                반도체 업무 예시 키워드·테이블 7개·정답셋 (예시 데이터)
+sample_data/                반도체 업무 예시 키워드·테이블 7개 (예시 데이터)
 tests/                      LLM 없이 파싱·검증 로직 테스트
 ```
 
@@ -31,13 +30,12 @@ pip install -r requirements.txt
 # 1) 프롬프트만 생성해 확인 (LLM 호출 없음) → output/prompts/
 python app.py run --dry-run
 
-# 2) 규칙 기반 baseline (LLM 없이 파이프라인 점검 + 비교 기준)
-python app.py run --provider mock && python app.py eval
+# 2) 규칙 기반 mock (LLM 없이 파이프라인 점검)
+python app.py run --provider mock
 
 # 3) 사내 LLM Gateway (OpenAI 호환)
 export LLM_BASE_URL=https://<gateway>/v1  LLM_MODEL=<model>  LLM_API_KEY=<key>
 python app.py run --provider openai --workers 4
-python app.py eval
 
 # 4) 대량 처리: 중단 후 이어하기, 특정 시스템만
 python app.py run --provider openai --tables meta.csv --system MES --resume
@@ -57,7 +55,6 @@ python app.py run --provider openai --tables meta.csv --system MES --resume
 ## 출력
 - `output/results.jsonl` — 테이블별 상세 결과 (민감 컬럼·row 조건·근거 키워드·검토 사유)
 - `output/summary.csv` — 검토자용 요약 (Excel에서 바로 열림)
-- `output/eval_report.json` — 정답셋 평가
 
 ## 테스트
 ```bash
