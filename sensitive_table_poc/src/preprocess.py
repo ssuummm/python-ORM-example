@@ -1,7 +1,7 @@
 """LLM 호출 전 전처리.
 
 1) 규칙 기반 키워드 사전 매칭 → LLM 힌트 + 후처리 교차검증에 사용
-2) 샘플 값 프로파일링/마스킹 → 원본 민감값이 LLM으로 나가지 않도록
+2) LLM에 보낼 테이블 JSON 만들기
 3) 컬럼이 많은 테이블 분할
 """
 from __future__ import annotations
@@ -9,8 +9,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-from .config import Settings
-from .models import TABLE_TARGET, ColumnMeta, Keyword, KeywordHit, TableMeta
+from .models import TABLE_TARGET, Keyword, KeywordHit, TableMeta
 
 # ---------------------------------------------------------------------------
 # 1. 키워드 사전 매칭
@@ -104,92 +103,29 @@ def format_hints(hits: list[KeywordHit], kw_index: dict[str, Keyword]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 2. 샘플 값 프로파일링 / 마스킹
+# 2. LLM에 보낼 테이블 JSON
 # ---------------------------------------------------------------------------
-PII_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("KR_RRN", re.compile(r"^\d{6}-?[1-8]\d{6}$")),
-    ("EMAIL", re.compile(r"^[\w.+-]+@[\w-]+\.[\w.-]+$")),
-    ("KR_MOBILE", re.compile(r"^01[016789]-?\d{3,4}-?\d{4}$")),
-    ("CARD_NO", re.compile(r"^\d{4}-?\d{4}-?\d{4}-?\d{4}$")),
-    ("IPV4", re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")),
-    ("HASH_OR_ENCRYPTED", re.compile(r"^(?:[A-Fa-f0-9]{32,}|\$2[aby]\$.{50,}|[A-Za-z0-9+/]{24,}={0,2})$")),
-]
-_CODE_COL_SUFFIX = re.compile(r"_(CD|CODE|TYPE|TP|GB|GBN|GRADE|GRD|LVL|LEVEL|YN|FLAG|FLG|STAT|STATUS|CLS)$", re.I)
-_CODE_STD_SUFFIX = ("코드", "구분", "등급", "여부", "유형", "상태")
-
-
-def detect_pattern(v: str) -> str | None:
-    for tag, p in PII_PATTERNS:
-        if p.match(v.strip()):
-            return tag
-    return None
-
-
-def shape(v: str, limit: int = 40) -> str:
-    """값의 형태만 남긴다: 숫자→9, 영문→X, 한글→가 (구분자·기호는 유지)."""
-    out = []
-    for ch in v[:limit]:
-        if ch.isdigit():
-            out.append("9")
-        elif ch.isascii() and ch.isalpha():
-            out.append("X")
-        elif "가" <= ch <= "힣":
-            out.append("가")
-        else:
-            out.append(ch)
-    return "".join(out) + ("…" if len(v) > limit else "")
-
-
-def is_code_column(c: ColumnMeta) -> bool:
-    """코드/구분/등급 컬럼은 값 자체가 row 조건의 근거가 되므로 원문 유지."""
-    return bool(_CODE_COL_SUFFIX.search(c.column_name)) or c.std_term.endswith(_CODE_STD_SUFFIX)
-
-
-def profile_values(c: ColumnMeta, has_hit: bool, settings: Settings) -> tuple[list[str], list[str]]:
-    vals = c.sample_values[: settings.max_sample_values]
-    patterns: set[str] = set()
-    all_distinct = len(vals) > 1 and len(set(vals)) == len(vals)
-    code_col = is_code_column(c)
-    out: list[str] = []
-    for v in vals:
-        tag = detect_pattern(v)
-        if tag:
-            patterns.add(tag)
-        if settings.send_raw_values:
-            out.append(v[:60])
-        elif tag == "HASH_OR_ENCRYPTED":
-            out.append(f"[{tag}]")
-        elif tag:
-            out.append(f"[{tag}] {shape(v)}")
-        elif has_hit and all_distinct and not code_col:
-            # 키워드가 걸린 컬럼의 고유값(금액, 이름, 사번 등)은 형태만 전달
-            out.append(shape(v))
-        else:
-            out.append(v[:60])
-    return list(dict.fromkeys(out)), sorted(patterns)
-
-
-def build_table_payload(table: TableMeta, hits: list[KeywordHit], settings: Settings) -> dict:
-    hit_cols = {h.target for h in hits if h.target != TABLE_TARGET}
-    cols = []
+def build_table_payload(table: TableMeta) -> dict:
+    """테이블·컬럼 정보를 LLM에 보낼 JSON으로 만든다. 비어 있는 항목은 뺀다."""
+    columns = []
     for c in table.columns:
-        values, patterns = profile_values(c, c.column_name in hit_cols, settings)
-        d: dict = {"name": c.column_name}
-        for key, val in (("desc", c.column_desc), ("std_term", c.std_term),
-                         ("std_term_desc", c.std_term_desc), ("type", c.data_type)):
-            if val:
-                d[key] = val
-        if values:
-            d["values"] = values
-        if patterns:
-            d["value_patterns"] = patterns
-        cols.append(d)
+        col = {"name": c.column_name}
+        if c.column_desc:
+            col["desc"] = c.column_desc
+        if c.std_term:
+            col["std_term"] = c.std_term
+        if c.std_term_desc:
+            col["std_term_desc"] = c.std_term_desc
+        if c.data_type:
+            col["type"] = c.data_type
+        columns.append(col)
+
     return {
         "table_id": table.table_id,
         "system_code": table.system_code,
         "table_name": table.table_name,
         "table_desc": table.table_desc,
-        "columns": cols,
+        "columns": columns,
     }
 
 
