@@ -50,14 +50,13 @@ def write_summary(out_dir: Path) -> Path:
     path = out_dir / "summary.csv"
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["table_id", "system_code", "decision", "sensitivity_level", "confidence",
+        w.writerow(["table_id", "sys_cd", "decision", "confidence",
                     "sensitive_columns", "row_conditions", "matched_keywords",
                     "needs_review", "review_reasons", "reason", "error"])
         for r in latest.values():
             sd = r.get("sensitive_data", [])
             w.writerow([
-                r["table_id"], r["system_code"], r["decision"], r.get("sensitivity_level"),
-                r.get("confidence"),
+                r["table_id"], r["sys_cd"], r["decision"], r.get("confidence"),
                 " | ".join(s["column_name"] for s in sd if s["type"] == "column"),
                 " | ".join(s["row_condition"] or "" for s in sd if s["type"] == "row_condition"),
                 " | ".join(sorted({f'{m["keyword_id"]}:{m["keyword"]}' for s in sd for m in s["matched_keywords"]})),
