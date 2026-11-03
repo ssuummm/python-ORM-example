@@ -13,7 +13,7 @@ import re
 
 from .config import Settings
 from .models import (
-    LEVEL_RANK, TABLE_TARGET, CandidateNote, Keyword, KeywordHit, LLMDecision,
+    TABLE_TARGET, CandidateNote, Keyword, KeywordHit, LLMDecision,
     MatchedKeywordInfo, SensitiveFinding, TableMeta, TableResult,
 )
 
@@ -78,7 +78,7 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
                 warnings.append(f"{where}: 존재하지 않는 keyword_id '{kid}' 제거")
                 continue
             out.append(MatchedKeywordInfo(keyword_id=k.keyword_id, keyword=k.keyword,
-                                          source=k.source, level=k.level, category=k.category))
+                                          source=k.source, type=k.type))
         return out
 
     # --- 민감 항목 검증 ---
@@ -134,8 +134,7 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
     strong_fields = {"column_name", "column_desc", "std_term"}
     for h in hits:
         k = kw_index.get(h.keyword_id)
-        if (h.target != TABLE_TARGET and h.target not in mentioned and h.field in strong_fields
-                and k is not None and k.level == "HIGH"):
+        if (h.target != TABLE_TARGET and h.target not in mentioned and h.field in strong_fields and k is not None):
             review.append(f"{h.target}: HIGH 키워드 {k.keyword_id}({k.keyword}) 매칭되었으나 LLM 판단에서 누락")
             mentioned.add(h.target)
 
@@ -144,16 +143,10 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
     if d.needs_review:
         review.append("LLM 요청: " + (d.review_reason or "사유 미기재"))
 
-    level = "NONE"
-    if decision == "sensitive":
-        levels = [m.level for f in findings for m in f.matched_keywords] or ["MEDIUM"]
-        level = max(levels, key=lambda x: LEVEL_RANK[x])
-
     return TableResult(
-        table_id=table.table_id, system_code=table.system_code,
-        decision=decision, sensitivity_level=level,
-        sensitive_data=findings, non_sensitive_candidates=non_sens, unlisted_candidates=unlisted,
-        reason=d.reason, confidence=d.confidence,
+        table_id=table.table_id, sys_cd=table.sys_cd,
+        decision=decision, sensitive_data=findings, non_sensitive_candidates=non_sens, 
+        unlisted_candidates=unlisted, reason=d.reason, confidence=d.confidence,
         needs_review=bool(review), review_reasons=list(dict.fromkeys(review)),
         validation_warnings=warnings, prefilter_hit_count=len(hits), meta=meta,
     )
