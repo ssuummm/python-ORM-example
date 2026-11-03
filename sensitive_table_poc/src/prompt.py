@@ -31,11 +31,11 @@ def format_keywords(kws: list[Keyword]) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(global_kws: list[Keyword]) -> str:
-    return _load("system_prompt.md").replace("{{GLOBAL_KEYWORDS}}", format_keywords(global_kws))
+def build_system_prompt() -> str:
+    return _load("system_prompt.md")
 
 
-def build_user_prompt(sys_cd: str, system_kws: list[Keyword], payload: dict,
+def build_user_prompt(sys_cd: str, keywords: list[Keyword], payload: dict,
                       hints_text: str, chunk_no: int, chunk_total: int) -> str:
     if chunk_total > 1:
         chunk_info = (f"※ 이 테이블은 컬럼 수가 많아 {chunk_total}개 묶음으로 나누어 판단한다. "
@@ -44,7 +44,7 @@ def build_user_prompt(sys_cd: str, system_kws: list[Keyword], payload: dict,
         chunk_info = "※ 테이블 전체 컬럼이 제공되었다."
     return (_load("user_prompt.md")
             .replace("{{sys_cd}}", sys_cd)
-            .replace("{{SYSTEM_KEYWORDS}}", format_keywords(system_kws))
+            .replace("{{KEYWORDS}}", format_keywords(keywords))
             .replace("{{PREFILTER_HINTS}}", hints_text)
             .replace("{{CHUNK_INFO}}", chunk_info)
             .replace("{{TABLE_JSON}}", compact_payload(payload)))

@@ -1,8 +1,8 @@
 ## 대상 시스템
 {{sys_cd}}
 
-## 시스템별 고위험 키워드 ({{sys_cd}} 전용)
-{{SYSTEM_KEYWORDS}}
+## 고위험 키워드
+{{KEYWORDS}}
 
 ## 사전 키워드 매칭 힌트 (규칙 기반 문자열 매칭, 참고용)
 {{PREFILTER_HINTS}}

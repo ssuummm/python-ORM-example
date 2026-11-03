@@ -49,7 +49,6 @@ def load_keywords(path: str) -> list[Keyword]:
             equivalent_terms=equivalent_terms,
             high_risk_tag=row["high_risk_tag"],
             sys_cd=sys_cd,
-            type="global" if sys_cd == "*" else "system",
         ))
     return keywords
 

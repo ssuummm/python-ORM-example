@@ -17,7 +17,6 @@ class Keyword(BaseModel):
     equivalent_terms: list[str] = Field(default_factory=list)
     high_risk_tag: str = ""
     sys_cd: str = "*"                                  # "*"이면 모든 시스템에 적용
-    type: Literal["global", "system"] = "global"       # sys_cd="*"이면 global, 아니면 system
 
     @property
     def terms(self) -> list[str]:
@@ -119,7 +118,7 @@ class LLMDecision(BaseModel):
 class MatchedKeywordInfo(BaseModel):
     keyword_id: str
     keyword: str
-    type: str
+    sys_cd: str
     high_risk_tag: str = ""
 
 

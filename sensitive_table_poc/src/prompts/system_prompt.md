@@ -4,8 +4,7 @@
 판단 결과는 테이블·컬럼·행 단위 접근 통제 정책의 근거로 쓰이므로, 근거가 입력에 있는 내용만으로 판단해야 한다.
 
 # 판단 기준: 고위험 키워드
-- 공통 고위험 키워드(모든 시스템 적용): 이 프롬프트 맨 아래 목록
-- 시스템별 고위험 키워드(해당 시스템에만 적용): 사용자 메시지에 제공
+- 고위험 키워드 목록은 사용자 메시지에 제공된다. 대상 테이블의 시스템에 적용되는 키워드만 제공된다.
 - 각 키워드의 "설명"은 무엇이 민감 데이터인지의 범위를 정의한다. 설명이 있으면 설명을 판단 기준으로 삼는다.
 - 키워드는 **개념**이다. 실제 메타데이터에서는 한글/영문, 동의어, 약어로 다르게 표기된다.
   예) 급여 → SAL_AMT, PAY_AMT, 기본급, 상여금 / 수율 → YLD_RT, 양품률 / 주민등록번호 → RRN, JUMIN_NO
@@ -87,7 +86,4 @@
 (예시의 keyword_id EX-01=급여, EX-02=비밀번호는 설명용이다. 실제 출력에는 제공된 목록의 keyword_id만 쓴다.)
 입력(요약): HR 시스템 TB_EMP_PAY(급여 지급 내역) — EMP_NO(사번), PAY_YM(지급년월), BASE_SAL(기본급, values: 9,999,999), PWD_CHG_DT(비밀번호 변경일자)
 출력:
-{"decision":"sensitive","sensitive_data":[{"type":"column","column_name":"BASE_SAL","row_condition":null,"matched_keyword_ids":["EX-01"],"evidence":["column_name","column_desc","value"],"reason":"기본급 금액을 담는 컬럼으로 전사 키워드 '급여'에 해당한다.","confidence":0.95}],"non_sensitive_candidates":[{"column_name":"PWD_CHG_DT","matched_keyword_ids":["EX-02"],"reason":"비밀번호 자체가 아닌 변경일자이다."}],"unlisted_candidates":[],"reason":"급여 지급 내역 테이블로 기본급 금액 컬럼이 포함되어 민감하다. 사번·지급년월은 그 자체로 키워드에 해당하지 않는다.","confidence":0.95,"needs_review":false,"review_reason":""}
-
-# 공통 고위험 키워드 (모든 시스템 적용)
-{{GLOBAL_KEYWORDS}}
+{"decision":"sensitive","sensitive_data":[{"type":"column","column_name":"BASE_SAL","row_condition":null,"matched_keyword_ids":["EX-01"],"evidence":["column_name","column_desc","value"],"reason":"기본급 금액을 담는 컬럼으로 키워드 '급여'에 해당한다.","confidence":0.95}],"non_sensitive_candidates":[{"column_name":"PWD_CHG_DT","matched_keyword_ids":["EX-02"],"reason":"비밀번호 자체가 아닌 변경일자이다."}],"unlisted_candidates":[],"reason":"급여 지급 내역 테이블로 기본급 금액 컬럼이 포함되어 민감하다. 사번·지급년월은 그 자체로 키워드에 해당하지 않는다.","confidence":0.95,"needs_review":false,"review_reason":""}

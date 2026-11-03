@@ -42,8 +42,6 @@ def cmd_run(a: argparse.Namespace) -> int:
     s = load_settings(provider=a.provider, max_columns_per_call=a.max_columns,
                       send_raw_values=True if a.send_raw_values else None)
     keywords = load_keywords(a.keywords)
-    gk = [k for k in keywords if k.sys_cd == "*"]   # 전체 시스템 공통 → 시스템 프롬프트
-    sk = [k for k in keywords if k.sys_cd != "*"]   # 시스템별 → 해당 시스템 테이블의 사용자 프롬프트
     tables = load_tables(a.tables)
     if a.system:
         tables = [t for t in tables if t.sys_cd == a.system]
@@ -52,15 +50,15 @@ def cmd_run(a: argparse.Namespace) -> int:
     if a.limit:
         tables = tables[: a.limit]
     out = Path(a.out_dir)
-    logging.info("키워드: 공통(*) %d / 시스템별 %d, 대상 테이블 %d", len(gk), len(sk), len(tables))
+    logging.info("키워드 %d개, 대상 테이블 %d개", len(keywords), len(tables))
 
     if a.dry_run:
-        clf = SensitiveTableClassifier(gk, sk, s, client=None)
+        clf = SensitiveTableClassifier(keywords, s, client=None)
         d = write_prompts(out, clf.system_prompt, {t.table_id: clf.render_prompts(t) for t in tables})
         print(f"프롬프트 생성 완료: {d}")
         return 0
 
-    clf = SensitiveTableClassifier(gk, sk, s, create_client(s))
+    clf = SensitiveTableClassifier(keywords, s, create_client(s))
     if a.resume:
         done = load_done_ids(out)
         tables = [t for t in tables if t.table_id not in done]

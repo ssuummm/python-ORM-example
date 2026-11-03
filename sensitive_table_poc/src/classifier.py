@@ -19,18 +19,16 @@ log = logging.getLogger(__name__)
 
 
 class SensitiveTableClassifier:
-    def __init__(self, global_kws: list[Keyword], system_kws: list[Keyword],
-                 settings: Settings, client: LLMClient | None):
-        self.global_kws = global_kws
-        self.system_kws = system_kws
+    def __init__(self, keywords: list[Keyword], settings: Settings, client: LLMClient | None):
+        self.keywords = keywords
         self.s = settings
         self.client = client
-        self.system_prompt = build_system_prompt(global_kws)  # 전 테이블 공통
+        self.system_prompt = build_system_prompt()  # 전 테이블 공통
 
     # ------------------------------------------------------------------
     def _prepare(self, table: TableMeta):
-        sys_kws = [k for k in self.system_kws if k.sys_cd == table.sys_cd]
-        kws = self.global_kws + sys_kws
+        # sys_cd가 "*"(전체 적용)이거나 이 테이블의 시스템과 같은 키워드만 사용
+        kws = [k for k in self.keywords if k.sys_cd in ("*", table.sys_cd)]
         kw_index = {k.keyword_id: k for k in kws}
         hits = KeywordMatcher(kws).find_hits(table)
         prompts = []
@@ -39,7 +37,7 @@ class SensitiveTableClassifier:
             names = {c.column_name for c in ch.columns}
             ch_hits = [h for h in hits if h.target == TABLE_TARGET or h.target in names]
             payload = build_table_payload(ch)
-            user = build_user_prompt(table.sys_cd, sys_kws, payload,
+            user = build_user_prompt(table.sys_cd, kws, payload,
                                      format_hints(ch_hits, kw_index), n, len(chunks))
             prompts.append((ch, ch_hits, user))
         return kw_index, hits, prompts
