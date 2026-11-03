@@ -5,10 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-Level = Literal["HIGH", "MEDIUM", "LOW"]
-LEVEL_RANK = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
 TABLE_TARGET = "__TABLE__"
-
 
 # =========================================================
 # 입력
@@ -16,21 +13,20 @@ TABLE_TARGET = "__TABLE__"
 class Keyword(BaseModel):
     keyword_id: str
     keyword: str
-    aliases: list[str] = Field(default_factory=list)   # 동의어·영문·약어 (예: 급여 → SALARY, SAL, PAY)
-    category: str = ""
-    level: Level = "HIGH"
-    description: str = ""
-    source: Literal["global", "system"] = "global"
-    system_code: str | None = None                      # source=system일 때 대상 시스템
+    source: str = ""
+    source_detail: str = ""
+    type: Literal["global", "system"] = "global"
+    sys_cd: str | None = None
 
     @property
     def terms(self) -> list[str]:
-        return [self.keyword, *self.aliases]
+        return [self.keyword] # 유사어 추가 시, 해당 부분에 추가
 
 
 class ColumnMeta(BaseModel):
     column_name: str
     column_desc: str = ""
+    equivalent_columns: str = ""
     std_term: str = ""
     std_term_desc: str = ""
     data_type: str = ""
@@ -45,7 +41,7 @@ class ColumnMeta(BaseModel):
 
 
 class TableMeta(BaseModel):
-    system_code: str
+    sys_cd: str
     schema_name: str = ""
     table_name: str
     table_desc: str = ""
@@ -121,8 +117,7 @@ class LLMDecision(BaseModel):
 class MatchedKeywordInfo(BaseModel):
     keyword_id: str
     keyword: str
-    source: str
-    level: str
+    type: str
     category: str = ""
 
 
@@ -138,9 +133,8 @@ class SensitiveFinding(BaseModel):
 
 class TableResult(BaseModel):
     table_id: str
-    system_code: str
+    sys_cd: str
     decision: Literal["sensitive", "non-sensitive", "error"]
-    sensitivity_level: Literal["HIGH", "MEDIUM", "LOW", "NONE"] = "NONE"
     sensitive_data: list[SensitiveFinding] = Field(default_factory=list)
     non_sensitive_candidates: list[CandidateNote] = Field(default_factory=list)
     unlisted_candidates: list[CandidateNote] = Field(default_factory=list)

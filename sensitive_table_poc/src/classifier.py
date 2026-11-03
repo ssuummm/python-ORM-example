@@ -29,7 +29,7 @@ class SensitiveTableClassifier:
 
     # ------------------------------------------------------------------
     def _prepare(self, table: TableMeta):
-        sys_kws = [k for k in self.system_kws if k.system_code == table.system_code]
+        sys_kws = [k for k in self.system_kws if k.sys_cd == table.sys_cd]
         kws = self.global_kws + sys_kws
         kw_index = {k.keyword_id: k for k in kws}
         hits = KeywordMatcher(kws).find_hits(table)
@@ -38,8 +38,8 @@ class SensitiveTableClassifier:
         for n, ch in enumerate(chunks, 1):
             names = {c.column_name for c in ch.columns}
             ch_hits = [h for h in hits if h.target == TABLE_TARGET or h.target in names]
-            payload = build_table_payload(ch, ch_hits, self.s)
-            user = build_user_prompt(table.system_code, sys_kws, payload,
+            payload = build_table_payload(ch)
+            user = build_user_prompt(table.sys_cd, sys_kws, payload,
                                      format_hints(ch_hits, kw_index), n, len(chunks))
             prompts.append((ch, ch_hits, user))
         return kw_index, hits, prompts
@@ -80,7 +80,7 @@ class SensitiveTableClassifier:
         except Exception as e:  # 한 테이블 실패가 전체 배치를 멈추지 않도록
             log.exception("판단 실패: %s", table.table_id)
             meta["latency_ms"] = int((time.time() - t0) * 1000)
-            return TableResult(table_id=table.table_id, system_code=table.system_code,
+            return TableResult(table_id=table.table_id, sys_cd=table.sys_cd,
                                decision="error", needs_review=True,
                                review_reasons=["처리 오류"], prefilter_hit_count=len(hits),
                                meta=meta, error=f"{type(e).__name__}: {e}")
