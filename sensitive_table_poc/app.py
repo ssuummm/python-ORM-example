@@ -98,7 +98,7 @@ def main(argv=None) -> int:
     r.add_argument("--out-dir", default=str(ROOT / "output"))
     r.add_argument("--provider", choices=["mock", "openai", "anthropic"], default=None,
                    help="미지정 시 LLM_PROVIDER 환경변수(기본 mock)")
-    r.add_argument("--workers", type=int, default=1)
+    r.add_argument("--workers", type=int, default=4, help="동시 처리 테이블 수 (기본 4)")
     r.add_argument("--max-columns", type=int, default=None, help="호출당 최대 컬럼 수")
     r.add_argument("--system", help="특정 system_code만")
     r.add_argument("--table", help="특정 테이블만 (table_id 또는 table_name)")
