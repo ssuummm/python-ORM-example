@@ -1,5 +1,5 @@
 ## 대상 시스템
-{{SYSTEM_CODE}}
+{{sys_cd}}
 
 ## 시스템별 고위험 키워드 (source=system)
 {{SYSTEM_KEYWORDS}}
