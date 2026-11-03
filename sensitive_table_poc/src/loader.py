@@ -2,7 +2,8 @@
 
 입력 파일은 모두 Excel에서 복사해 붙여넣은 txt(탭으로 구분)라고 가정한다.
 
-- 키워드 파일 열: keyword, source, source_detail
+- 키워드 파일(keywords.txt) 열: sys_cd, keyword, description, equivalent_terms, high_risk_tag,
+                              source, source_detail
 - 크롤링 결과 파일 열: table_name, table_desc, sys_cd, schema, column_name, column_desc,
                       equivalent_columns, std_term, std_term_desc, data_type
 """
@@ -25,32 +26,30 @@ def read_txt(path: str) -> pd.DataFrame:
     return df
 
 
-def load_keywords(path: str, keyword_type: str) -> list[Keyword]:
-    """키워드 파일을 읽는다. source는 "global"(전사) 또는 "system"(시스템별).
+def load_keywords(path: str) -> list[Keyword]:
+    """keywords.txt를 읽는다.
 
-    파일마다 있는 열이 다르므로(실제 배포 파일엔 keyword_id·aliases가 없음) 있는 열만 사용한다.
-    - keyword, source, source_detail
-    - sys_cd (시스템 키워드), aliases("|" 구분), category, level, description
+    열: sys_cd, keyword, description, equivalent_terms, high_risk_tag, source, source_detail
+    - sys_cd가 "*"이면 모든 시스템, 아니면 해당 시스템 테이블에만 적용
+    - equivalent_terms는 "|"로 구분 (예: Yield|YLD)
+    - source, source_detail은 출처 기록용이라 읽지 않는다.
     """
     df = read_txt(path)
-    df = df[df["keyword"] != ""]                  # 키워드가 빈 행 제거
-    df = df.drop_duplicates(subset=["keyword"])   # 같은 키워드 중복 제거
+    df = df[df["keyword"] != ""]                             # 키워드가 빈 행 제거
+    df = df.drop_duplicates(subset=["sys_cd", "keyword"])    # 같은 시스템의 같은 키워드 중복 제거
 
-    def col(row: dict, name: str) -> str:
-        return str(row.get(name, "") or "").strip()
-
-    prefix = "G" if keyword_type == "global" else "S"
     keywords = []
     for number, row in enumerate(df.to_dict("records"), start=1):
-        aliases = [a.strip() for a in col(row, "aliases").split("|") if a.strip()]
+        sys_cd = row["sys_cd"] or "*"                        # 빈 칸은 전체 적용(*)으로 간주
+        equivalent_terms = [t.strip() for t in row["equivalent_terms"].split("|") if t.strip()]
         keywords.append(Keyword(
-            keyword_id=col(row, "keyword_id") or f"{prefix}-{number:03d}",  # 예: G-001, S-001
-            keyword=col(row, "keyword"),
-            aliases=aliases,
-            source=col(row, "source"),
-            source_detail=col(row, "source_detail"),
-            type=keyword_type,
-            sys_cd=col(row, "sys_cd") or None,
+            keyword_id=f"K-{number:03d}",                    # 예: K-001
+            keyword=row["keyword"],
+            description=row["description"],
+            equivalent_terms=equivalent_terms,
+            high_risk_tag=row["high_risk_tag"],
+            sys_cd=sys_cd,
+            type="global" if sys_cd == "*" else "system",
         ))
     return keywords
 

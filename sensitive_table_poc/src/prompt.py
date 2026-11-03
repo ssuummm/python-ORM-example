@@ -23,6 +23,10 @@ def format_keywords(kws: list[Keyword]) -> str:
     lines = []
     for k in kws:
         parts = [k.keyword_id, k.keyword]
+        if k.equivalent_terms:
+            parts.append("동치 표현: " + ", ".join(k.equivalent_terms))
+        if k.description:
+            parts.append("설명: " + k.description)
         lines.append("- " + " | ".join(parts))
     return "\n".join(lines)
 

@@ -13,14 +13,16 @@ TABLE_TARGET = "__TABLE__"
 class Keyword(BaseModel):
     keyword_id: str
     keyword: str
-    source: str = ""
-    source_detail: str = ""
-    type: Literal["global", "system"] = "global"
-    sys_cd: str | None = None
+    description: str = ""
+    equivalent_terms: list[str] = Field(default_factory=list)
+    high_risk_tag: str = ""
+    sys_cd: str = "*"                                  # "*"이면 모든 시스템에 적용
+    type: Literal["global", "system"] = "global"       # sys_cd="*"이면 global, 아니면 system
 
     @property
     def terms(self) -> list[str]:
-        return [self.keyword] # 유사어 추가 시, 해당 부분에 추가
+        """사전 매칭에 쓰는 표현 목록: keyword + equivalent_terms"""
+        return [self.keyword, *self.equivalent_terms]
 
 
 class ColumnMeta(BaseModel):
@@ -118,7 +120,7 @@ class MatchedKeywordInfo(BaseModel):
     keyword_id: str
     keyword: str
     type: str
-    category: str = ""
+    high_risk_tag: str = ""
 
 
 class SensitiveFinding(BaseModel):

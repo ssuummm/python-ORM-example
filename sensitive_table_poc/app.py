@@ -30,20 +30,20 @@ from src.writer import ResultWriter, load_done_ids, write_prompts, write_summary
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
 DEFAULT_TABLES = DATA / "datalake_crawling_result.txt"
-DEFAULT_GLOBAL_KW = DATA / "global_keywords.txt"
-DEFAULT_SYSTEM_KW = DATA / "system_keywords.txt"
+DEFAULT_KEYWORDS = DATA / "keywords.txt"
 
 
 def cmd_run(a: argparse.Namespace) -> int:
-    missing = [p for p in (a.tables, a.global_keywords, a.system_keywords) if not Path(p).exists()]
+    missing = [p for p in (a.tables, a.keywords) if not Path(p).exists()]
     if missing:
         print("입력 파일이 없습니다:\n  " + "\n  ".join(missing))
-        print("data/ 폴더에 datalake_crawling_result.txt, global_keywords.txt, system_keywords.txt를 넣어주세요.")
+        print("data/ 폴더에 datalake_crawling_result.txt, keywords.txt를 넣어주세요.")
         return 1
     s = load_settings(provider=a.provider, max_columns_per_call=a.max_columns,
                       send_raw_values=True if a.send_raw_values else None)
-    gk = load_keywords(a.global_keywords, "global")
-    sk = load_keywords(a.system_keywords, "system")
+    keywords = load_keywords(a.keywords)
+    gk = [k for k in keywords if k.sys_cd == "*"]   # 전체 시스템 공통 → 시스템 프롬프트
+    sk = [k for k in keywords if k.sys_cd != "*"]   # 시스템별 → 해당 시스템 테이블의 사용자 프롬프트
     tables = load_tables(a.tables)
     if a.system:
         tables = [t for t in tables if t.sys_cd == a.system]
@@ -52,7 +52,7 @@ def cmd_run(a: argparse.Namespace) -> int:
     if a.limit:
         tables = tables[: a.limit]
     out = Path(a.out_dir)
-    logging.info("키워드: 전사 %d / 시스템 %d, 대상 테이블 %d", len(gk), len(sk), len(tables))
+    logging.info("키워드: 공통(*) %d / 시스템별 %d, 대상 테이블 %d", len(gk), len(sk), len(tables))
 
     if a.dry_run:
         clf = SensitiveTableClassifier(gk, sk, s, client=None)
@@ -94,8 +94,7 @@ def main(argv=None) -> int:
     r = sub.add_parser("run", help="민감 테이블 판단 실행 (기본 명령)")
     r.add_argument("-v", "--verbose", action="store_true")
     r.add_argument("--tables", default=str(DEFAULT_TABLES), help="테이블 메타데이터 (기본: data/datalake_crawling_result.txt)")
-    r.add_argument("--global-keywords", default=str(DEFAULT_GLOBAL_KW), help="기본: data/global_keywords.txt")
-    r.add_argument("--system-keywords", default=str(DEFAULT_SYSTEM_KW), help="기본: data/system_keywords.txt")
+    r.add_argument("--keywords", default=str(DEFAULT_KEYWORDS), help="기본: data/keywords.txt")
     r.add_argument("--out-dir", default=str(ROOT / "output"))
     r.add_argument("--provider", choices=["mock", "openai", "anthropic"], default=None,
                    help="미지정 시 LLM_PROVIDER 환경변수(기본 mock)")

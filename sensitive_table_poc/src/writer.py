@@ -41,6 +41,18 @@ class ResultWriter:
         self._f.close()
 
 
+def collect_high_risk_tags(sensitive_data: list[dict]) -> str:
+    """민감 판정 항목에 매칭된 키워드들의 high_risk_tag를 중복 없이 모아 "|"로 잇는다."""
+    tags = {
+        tag.strip()
+        for item in sensitive_data
+        for kw in item["matched_keywords"]
+        for tag in kw.get("high_risk_tag", "").split("|")
+        if tag.strip()
+    }
+    return "|".join(sorted(tags))
+
+
 def write_summary(out_dir: Path) -> Path:
     latest: dict[str, dict] = {}
     for line in (out_dir / "results.jsonl").read_text(encoding="utf-8").splitlines():
@@ -51,7 +63,7 @@ def write_summary(out_dir: Path) -> Path:
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["table_id", "sys_cd", "decision", "confidence",
-                    "sensitive_columns", "row_conditions", "matched_keywords",
+                    "sensitive_columns", "row_conditions", "matched_keywords", "high_risk_tag",
                     "needs_review", "review_reasons", "reason", "error"])
         for r in latest.values():
             sd = r.get("sensitive_data", [])
@@ -60,6 +72,7 @@ def write_summary(out_dir: Path) -> Path:
                 " | ".join(s["column_name"] for s in sd if s["type"] == "column"),
                 " | ".join(s["row_condition"] or "" for s in sd if s["type"] == "row_condition"),
                 " | ".join(sorted({f'{m["keyword_id"]}:{m["keyword"]}' for s in sd for m in s["matched_keywords"]})),
+                collect_high_risk_tags(sd),
                 r.get("needs_review"), " | ".join(r.get("review_reasons", [])),
                 r.get("reason", ""), r.get("error") or "",
             ])

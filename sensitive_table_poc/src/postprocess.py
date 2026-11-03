@@ -78,7 +78,7 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
                 warnings.append(f"{where}: 존재하지 않는 keyword_id '{kid}' 제거")
                 continue
             out.append(MatchedKeywordInfo(keyword_id=k.keyword_id, keyword=k.keyword,
-                                          source=k.source, type=k.type))
+                                          type=k.type, high_risk_tag=k.high_risk_tag))
         return out
 
     # --- 민감 항목 검증 ---
