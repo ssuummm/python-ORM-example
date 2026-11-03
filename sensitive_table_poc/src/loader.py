@@ -7,15 +7,7 @@
                       equivalent_columns, std_term, std_term_desc, data_type
 """
 import pandas as pd
-
 from .models import ColumnMeta, Keyword, TableMeta
-
-# 사내 열 이름을 코드에서 쓰는 이름으로 바꾼다.
-COLUMN_RENAME = {
-    "sys_cd": "system_code",
-    "schema": "schema_name",
-}
-
 
 def read_txt(path: str) -> pd.DataFrame:
     """탭으로 구분된 txt 파일을 DataFrame으로 읽는다."""
@@ -23,11 +15,9 @@ def read_txt(path: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, encoding="utf-8-sig")
     except UnicodeDecodeError:
-        # 메모장에서 ANSI로 저장한 한글 파일은 cp949 인코딩이다.
         df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, encoding="cp949")
 
     df.columns = [col.strip().lower() for col in df.columns]
-    df = df.rename(columns=COLUMN_RENAME)
 
     # 모든 칸의 앞뒤 공백 제거
     for col in df.columns:
@@ -35,20 +25,32 @@ def read_txt(path: str) -> pd.DataFrame:
     return df
 
 
-def load_keywords(path: str, source: str) -> list[Keyword]:
-    """키워드 파일을 읽는다. source는 "global"(전사) 또는 "system"(시스템별)."""
+def load_keywords(path: str, keyword_type: str) -> list[Keyword]:
+    """키워드 파일을 읽는다. source는 "global"(전사) 또는 "system"(시스템별).
+
+    파일마다 있는 열이 다르므로(실제 배포 파일엔 keyword_id·aliases가 없음) 있는 열만 사용한다.
+    - keyword, source, source_detail
+    - sys_cd (시스템 키워드), aliases("|" 구분), category, level, description
+    """
     df = read_txt(path)
     df = df[df["keyword"] != ""]                  # 키워드가 빈 행 제거
     df = df.drop_duplicates(subset=["keyword"])   # 같은 키워드 중복 제거
 
-    prefix = "G" if source == "global" else "S"
+    def col(row: dict, name: str) -> str:
+        return str(row.get(name, "") or "").strip()
+
+    prefix = "G" if keyword_type == "global" else "S"
     keywords = []
     for number, row in enumerate(df.to_dict("records"), start=1):
+        aliases = [a.strip() for a in col(row, "aliases").split("|") if a.strip()]
         keywords.append(Keyword(
-            keyword_id=f"{prefix}-{number:03d}",  # 예: G-001, S-001
-            keyword=row["keyword"],
-            description=f"출처: {row['source']} / {row['source_detail']}",
-            source=source,
+            keyword_id=col(row, "keyword_id") or f"{prefix}-{number:03d}",  # 예: G-001, S-001
+            keyword=col(row, "keyword"),
+            aliases=aliases,
+            source=col(row, "source"),
+            source_detail=col(row, "source_detail"),
+            type=keyword_type,
+            sys_cd=col(row, "sys_cd") or None,
         ))
     return keywords
 
@@ -65,7 +67,7 @@ def load_tables(path: str) -> list[TableMeta]:
         table_key = f"{row['schema_name']}.{row['table_name']}"
         if table_key not in tables:
             tables[table_key] = TableMeta(
-                system_code=row["system_code"],
+                sys_cd=row["sys_cd"],
                 schema_name=row["schema_name"],
                 table_name=row["table_name"],
                 table_desc=row["table_desc"],
@@ -74,6 +76,7 @@ def load_tables(path: str) -> list[TableMeta]:
         tables[table_key].columns.append(ColumnMeta(
             column_name=row["column_name"],
             column_desc=row["column_desc"],
+            equivalent_columns=row["equivalent_columns"],
             std_term=row["std_term"],
             std_term_desc=row["std_term_desc"],
             data_type=row["data_type"],
