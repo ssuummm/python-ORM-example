@@ -46,7 +46,7 @@ def cmd_run(a: argparse.Namespace) -> int:
     sk = load_keywords(a.system_keywords, "system")
     tables = load_tables(a.tables)
     if a.system:
-        tables = [t for t in tables if t.system_code == a.system]
+        tables = [t for t in tables if t.sys_cd == a.system]
     if a.table:
         tables = [t for t in tables if t.table_id == a.table or t.table_name == a.table]
     if a.limit:

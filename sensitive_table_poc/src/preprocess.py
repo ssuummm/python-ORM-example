@@ -122,7 +122,7 @@ def build_table_payload(table: TableMeta) -> dict:
 
     return {
         "table_id": table.table_id,
-        "system_code": table.system_code,
+        "sys_cd": table.sys_cd,
         "table_name": table.table_name,
         "table_desc": table.table_desc,
         "columns": columns,
