@@ -14,10 +14,12 @@
 각 컬럼은 다음 정보로 구성된다. 모두 종합해서 컬럼의 **실제 의미**를 파악하라.
 - name: 컬럼명(약어 조합이 많다. 예: EMP_NO=사원번호, YLD_RT=수율, RCP=레시피)
 - desc: 컬럼 설명 / std_term: 표준 용어 / std_term_desc: 표준 용어 정의(코드값 정의가 들어 있는 경우가 많다)
-- values: 샘플 값. 보안을 위해 마스킹되어 있을 수 있다.
-  - 9=숫자, X=영문자, 가=한글 (예: "9,999,999"는 금액 형태, "가가가"는 3글자 한글)
-  - [KR_RRN], [EMAIL], [KR_MOBILE], [CARD_NO], [IPV4], [HASH_OR_ENCRYPTED]는 값 패턴 탐지 결과
-- value_patterns: 해당 컬럼 값에서 탐지된 패턴 목록
+- values: 해당 컬럼의 대표 값(최대 10개). 실제 데이터에서 일부만 골라낸 것이므로 컬럼의 모든 값이 아니다.
+- value_source: values를 고른 방식
+  - keyword: 10개 모두 고위험 키워드(또는 동치 표현)를 포함한 값이다. 키워드를 포함한 값이 더 있을 수 있다.
+  - keyword+frequency: 앞부분은 키워드를 포함한 값이고, 나머지는 빈도가 높은 값이다.
+  - frequency: 키워드를 포함한 값이 없어, 빈도가 높은 값을 골랐다.
+- values·value_source가 없는 컬럼은 대표 값을 수집하지 않은 컬럼이다.
 
 사용자 메시지의 "사전 키워드 매칭 힌트"는 단순 문자열 매칭 결과다. **참고만 하라.**
 힌트에 있어도 비민감일 수 있고(글자만 겹침), 힌트에 없어도 민감일 수 있다(약어·동의어).
@@ -37,6 +39,17 @@
      (예: 보안등급 코드가 'S'(극비)·'A'(대외비)인 행만 민감)
    - row_condition은 StarRocks(MySQL 호환) SQL의 WHERE 절 조건식으로만 쓴다. 예: SEC_GRADE_CD IN ('S','A')
    - 조건에 쓰는 값은 반드시 입력의 values 또는 std_term_desc/desc에 근거가 있어야 한다. 값을 추측하지 마라.
+   - value_source가 keyword 또는 keyword+frequency이면, 키워드를 포함한 값이 그 컬럼에 실제로 있다는 뜻이다.
+     그 값을 가진 행이 키워드가 가리키는 민감 데이터인지 판단하고, 민감하면 row_condition으로 기록한다.
+     (예: 제품 유형 컬럼의 values에 'HBM3E', 'HBM3'가 있으면 HBM 제품 행이 민감)
+     컬럼의 모든 값이 아니라 일부 행만 해당하므로, 컬럼 전체(type="column")로 기록하지 않는다.
+   - values는 일부만 보여 주므로, 같은 키워드를 공유하는 값은 IN 목록보다 LIKE 패턴을 우선한다.
+     예: UPPER(PROD_TYPE) LIKE '%HBM%'   (키워드가 여러 개면 OR로 연결)
+     정해진 코드값만 해당하면 IN을 쓴다. 예: SEC_GRADE_CD IN ('S','A')
+   - LIKE 패턴의 핵심 문자열(예: HBM)도 values에 실제로 나타나야 한다.
+   - 키워드와 글자만 겹치는 값(예: 'SOMETHING' 속의 'SOM')은 민감 근거로 보지 않는다.
+   - value_source가 frequency이면 대표 값에서 키워드가 보이지 않은 것이다. 값만으로 민감 행을 단정하지 말고,
+     컬럼 의미와 std_term_desc의 코드 정의를 근거로 판단한다.
    - 해당 행이 민감해짐으로써 그 행 전체(과제명 등)가 민감해지는 것이므로, 조건의 기준 컬럼을 column_name에 적는다.
 4. 키워드 목록에는 없지만 일반적으로 민감해 보이는 컬럼은 unlisted_candidates에 기록한다.
    이 항목은 decision에 영향을 주지 않는다(키워드 사전 보강용).
@@ -46,7 +59,7 @@
 # 규칙
 - column_name은 입력에 있는 컬럼명을 대소문자까지 그대로 쓴다. 입력에 없는 컬럼명을 만들지 마라.
 - matched_keyword_ids에는 제공된 키워드 목록의 keyword_id만 쓴다. sensitive_data 항목은 최소 1개의 keyword_id를 가져야 한다.
-- evidence는 판단 근거가 된 입력 필드명이다: table_name, table_desc, column_name, column_desc, std_term, std_term_desc, value, value_pattern
+- evidence는 판단 근거가 된 입력 필드명이다: table_name, table_desc, column_name, column_desc, std_term, std_term_desc, value
 - reason은 한국어로, 어떤 근거로 어떤 키워드에 해당하는지 구체적으로 1~2문장 쓴다.
 - confidence(0.0~1.0) 기준:
   - 0.9 이상: desc 또는 std_term이 키워드를 직접 언급
@@ -83,7 +96,11 @@
 }
 
 # 예시
-(예시의 keyword_id EX-01=급여, EX-02=비밀번호는 설명용이다. 실제 출력에는 제공된 목록의 keyword_id만 쓴다.)
+(예시의 keyword_id EX-01=급여, EX-02=비밀번호, EX-03=HBM은 설명용이다. 실제 출력에는 제공된 목록의 keyword_id만 쓴다.)
 입력(요약): HR 시스템 TB_EMP_PAY(급여 지급 내역) — EMP_NO(사번), PAY_YM(지급년월), BASE_SAL(기본급, values: 9,999,999), PWD_CHG_DT(비밀번호 변경일자)
 출력:
 {"decision":"sensitive","sensitive_data":[{"type":"column","column_name":"BASE_SAL","row_condition":null,"matched_keyword_ids":["EX-01"],"evidence":["column_name","column_desc","value"],"reason":"기본급 금액을 담는 컬럼으로 키워드 '급여'에 해당한다.","confidence":0.95}],"non_sensitive_candidates":[{"column_name":"PWD_CHG_DT","matched_keyword_ids":["EX-02"],"reason":"비밀번호 자체가 아닌 변경일자이다."}],"unlisted_candidates":[],"reason":"급여 지급 내역 테이블로 기본급 금액 컬럼이 포함되어 민감하다. 사번·지급년월은 그 자체로 키워드에 해당하지 않는다.","confidence":0.95,"needs_review":false,"review_reason":""}
+
+입력(요약): GSCM 시스템 TB_SHIP_PLAN(제품별 출하 계획) — PROD_TYPE(제품 유형, values: HBM3E | HBM3 | DDR5 | LPDDR5X, value_source: keyword+frequency), SHIP_QTY(출하 수량), SHIP_DT(출하일자)
+출력:
+{"decision":"sensitive","sensitive_data":[{"type":"row_condition","column_name":"PROD_TYPE","row_condition":"UPPER(PROD_TYPE) LIKE '%HBM%'","matched_keyword_ids":["EX-03"],"evidence":["column_desc","value"],"reason":"제품 유형 값에 HBM3E·HBM3가 있어 HBM 제품 행의 출하 계획이 키워드 'HBM'에 해당한다.","confidence":0.88}],"non_sensitive_candidates":[],"unlisted_candidates":[],"reason":"출하 계획 테이블 중 HBM 제품 행만 민감하다. DDR5 등 다른 제품 행은 키워드에 해당하지 않는다.","confidence":0.88,"needs_review":false,"review_reason":""}

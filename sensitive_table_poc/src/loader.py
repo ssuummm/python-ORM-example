@@ -78,5 +78,7 @@ def load_tables(path: str) -> list[TableMeta]:
             std_term=row["std_term"],
             std_term_desc=row["std_term_desc"],
             data_type=row["data_type"],
+            sample_values=[v.strip() for v in row["sample_values"].split("|") if v.strip()],
+            sample_source=row["sample_source"],
         ))
     return list(tables.values())

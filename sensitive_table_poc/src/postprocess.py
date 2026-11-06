@@ -55,6 +55,7 @@ def _check_row_condition(cond: str, column: str, col_names: set[str],
     if unknown:
         errs.append(f"row_condition에 존재하지 않는 컬럼: {unknown}")
     for lit in _QUOTED.findall(cond):
+        lit = lit.replace("%", "").strip()   # LIKE 패턴('%HBM%')은 %를 뺀 핵심 문자열로 확인
         if lit and lit.upper() not in evidence_text.upper():
             errs.append(f"row_condition 값 '{lit}'의 근거(샘플 값/표준용어 설명)를 찾지 못함")
     return errs

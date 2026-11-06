@@ -16,6 +16,7 @@ from .models import TABLE_TARGET, Keyword, KeywordHit, TableMeta
 # ---------------------------------------------------------------------------
 _SEP = re.compile(r"[\s_\-\.]+")
 _CAMEL = re.compile(r"([a-z0-9])([A-Z])")
+_ALNUM = re.compile(r"([A-Za-z])([0-9])|([0-9])([A-Za-z])")
 
 
 def normalize(text: str) -> str:
@@ -23,8 +24,9 @@ def normalize(text: str) -> str:
 
 
 def identifier_tokens(name: str) -> set[str]:
-    """RRN_ENC → {RRN, ENC}, salaryAmt → {SALARY, AMT}"""
+    """RRN_ENC → {RRN, ENC}, salaryAmt → {SALARY, AMT}, HBM3E → {HBM, 3, E}"""
     name = _CAMEL.sub(r"\1_\2", name or "")
+    name = _ALNUM.sub(lambda m: "_".join(g for g in m.groups() if g), name)   # 영문·숫자 경계도 분리
     return {t.upper() for t in _SEP.split(name) if t}
 
 
@@ -118,6 +120,9 @@ def build_table_payload(table: TableMeta) -> dict:
             col["std_term_desc"] = c.std_term_desc
         if c.data_type:
             col["type"] = c.data_type
+        if c.sample_values:
+            col["values"] = c.sample_values
+            col["value_source"] = c.sample_source
         columns.append(col)
 
     return {

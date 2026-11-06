@@ -32,6 +32,7 @@ class ColumnMeta(BaseModel):
     std_term_desc: str = ""
     data_type: str = ""
     sample_values: list[str] = Field(default_factory=list)
+    sample_source: str = ""        # keyword | keyword+frequency | frequency
 
     @field_validator("sample_values", mode="before")
     @classmethod
