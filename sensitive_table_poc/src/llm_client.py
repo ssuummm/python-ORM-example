@@ -122,7 +122,6 @@ class MockClient(LLMClient):
             "decision": "sensitive" if items else "non-sensitive",
             "sensitive_data": items,
             "non_sensitive_candidates": [],
-            "unlisted_candidates": [],
             "reason": "[MOCK] 실제 LLM 판단이 아닌 사전 매칭 결과입니다.",
             "confidence": 0.75 if items else 0.6,
             "needs_review": False,

@@ -85,7 +85,6 @@ class LLMDecision(BaseModel):
     decision: Literal["sensitive", "non-sensitive"]
     sensitive_data: list[SensitiveItem] = Field(default_factory=list)
     non_sensitive_candidates: list[CandidateNote] = Field(default_factory=list)
-    unlisted_candidates: list[CandidateNote] = Field(default_factory=list)
     reason: str = ""
     confidence: float = Field(ge=0.0, le=1.0)
     needs_review: bool = False
@@ -139,7 +138,6 @@ class TableResult(BaseModel):
     decision: Literal["sensitive", "non-sensitive", "error"]
     sensitive_data: list[SensitiveFinding] = Field(default_factory=list)
     non_sensitive_candidates: list[CandidateNote] = Field(default_factory=list)
-    unlisted_candidates: list[CandidateNote] = Field(default_factory=list)
     reason: str = ""
     confidence: float = 0.0
     needs_review: bool = False

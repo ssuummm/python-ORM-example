@@ -32,7 +32,6 @@ def merge_decisions(ds: list[LLMDecision]) -> LLMDecision:
         decision="sensitive" if sens else "non-sensitive",
         sensitive_data=[i for d in ds for i in d.sensitive_data],
         non_sensitive_candidates=[i for d in ds for i in d.non_sensitive_candidates],
-        unlisted_candidates=[i for d in ds for i in d.unlisted_candidates],
         reason=" / ".join(f"[{n}] {d.reason}" for n, d in enumerate(ds, 1) if d.reason),
         # 민감: 가장 확신 있는 근거 1개로 충분 / 비민감: 가장 약한 묶음이 전체 확신도
         confidence=max(d.confidence for d in sens) if sens else min(d.confidence for d in ds),
@@ -118,9 +117,6 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
         return out
 
     non_sens = clean_notes(d.non_sensitive_candidates, "non_sensitive_candidates")
-    unlisted = clean_notes(d.unlisted_candidates, "unlisted_candidates")
-    if unlisted:
-        review.append(f"키워드 사전 밖 민감 의심 컬럼 {len(unlisted)}건 (키워드 사전 보강 검토)")
 
     # --- decision 정합성 ---
     decision = d.decision
@@ -146,8 +142,8 @@ def finalize(table: TableMeta, d: LLMDecision, kw_index: dict[str, Keyword],
 
     return TableResult(
         table_id=table.table_id, sys_cd=table.sys_cd,
-        decision=decision, sensitive_data=findings, non_sensitive_candidates=non_sens, 
-        unlisted_candidates=unlisted, reason=d.reason, confidence=d.confidence,
+        decision=decision, sensitive_data=findings, non_sensitive_candidates=non_sens,
+        reason=d.reason, confidence=d.confidence,
         needs_review=bool(review), review_reasons=list(dict.fromkeys(review)),
         validation_warnings=warnings, prefilter_hit_count=len(hits), meta=meta,
     )

@@ -51,10 +51,8 @@
    - value_source가 frequency이면 대표 값에서 키워드가 보이지 않은 것이다. 값만으로 민감 행을 단정하지 말고,
      컬럼 의미와 std_term_desc의 코드 정의를 근거로 판단한다.
    - 해당 행이 민감해짐으로써 그 행 전체(과제명 등)가 민감해지는 것이므로, 조건의 기준 컬럼을 column_name에 적는다.
-4. 키워드 목록에는 없지만 일반적으로 민감해 보이는 컬럼은 unlisted_candidates에 기록한다.
-   이 항목은 decision에 영향을 주지 않는다(키워드 사전 보강용).
-5. sensitive_data가 1건 이상이면 decision="sensitive", 없으면 "non-sensitive".
-6. 판단이 애매하면 보안을 우선하여 민감 쪽으로 판단하고 needs_review=true와 사유를 적는다.
+4. sensitive_data가 1건 이상이면 decision="sensitive", 없으면 "non-sensitive".
+5. 판단이 애매하면 보안을 우선하여 민감 쪽으로 판단하고 needs_review=true와 사유를 적는다.
 
 # 규칙
 - column_name은 입력에 있는 컬럼명을 대소문자까지 그대로 쓴다. 입력에 없는 컬럼명을 만들지 마라.
@@ -86,9 +84,6 @@
   "non_sensitive_candidates": [
     {"column_name": "키워드와 혼동될 수 있으나 비민감인 컬럼", "matched_keyword_ids": ["keyword_id"], "reason": "비민감 사유"}
   ],
-  "unlisted_candidates": [
-    {"column_name": "키워드 목록 밖 민감 의심 컬럼", "matched_keyword_ids": [], "reason": "의심 사유"}
-  ],
   "reason": "테이블 전체 판단 요약 (한국어 2~3문장)",
   "confidence": 0.0,
   "needs_review": false,
@@ -99,8 +94,8 @@
 (예시의 keyword_id EX-01=급여, EX-02=비밀번호, EX-03=HBM은 설명용이다. 실제 출력에는 제공된 목록의 keyword_id만 쓴다.)
 입력(요약): HR 시스템 TB_EMP_PAY(급여 지급 내역) — EMP_NO(사번), PAY_YM(지급년월), BASE_SAL(기본급, values: 9,999,999), PWD_CHG_DT(비밀번호 변경일자)
 출력:
-{"decision":"sensitive","sensitive_data":[{"type":"column","column_name":"BASE_SAL","row_condition":null,"matched_keyword_ids":["EX-01"],"evidence":["column_name","column_desc","value"],"reason":"기본급 금액을 담는 컬럼으로 키워드 '급여'에 해당한다.","confidence":0.95}],"non_sensitive_candidates":[{"column_name":"PWD_CHG_DT","matched_keyword_ids":["EX-02"],"reason":"비밀번호 자체가 아닌 변경일자이다."}],"unlisted_candidates":[],"reason":"급여 지급 내역 테이블로 기본급 금액 컬럼이 포함되어 민감하다. 사번·지급년월은 그 자체로 키워드에 해당하지 않는다.","confidence":0.95,"needs_review":false,"review_reason":""}
+{"decision":"sensitive","sensitive_data":[{"type":"column","column_name":"BASE_SAL","row_condition":null,"matched_keyword_ids":["EX-01"],"evidence":["column_name","column_desc","value"],"reason":"기본급 금액을 담는 컬럼으로 키워드 '급여'에 해당한다.","confidence":0.95}],"non_sensitive_candidates":[{"column_name":"PWD_CHG_DT","matched_keyword_ids":["EX-02"],"reason":"비밀번호 자체가 아닌 변경일자이다."}],"reason":"급여 지급 내역 테이블로 기본급 금액 컬럼이 포함되어 민감하다. 사번·지급년월은 그 자체로 키워드에 해당하지 않는다.","confidence":0.95,"needs_review":false,"review_reason":""}
 
 입력(요약): GSCM 시스템 TB_SHIP_PLAN(제품별 출하 계획) — PROD_TYPE(제품 유형, values: HBM3E | HBM3 | DDR5 | LPDDR5X, value_source: keyword+frequency), SHIP_QTY(출하 수량), SHIP_DT(출하일자)
 출력:
-{"decision":"sensitive","sensitive_data":[{"type":"row_condition","column_name":"PROD_TYPE","row_condition":"UPPER(PROD_TYPE) LIKE '%HBM%'","matched_keyword_ids":["EX-03"],"evidence":["column_desc","value"],"reason":"제품 유형 값에 HBM3E·HBM3가 있어 HBM 제품 행의 출하 계획이 키워드 'HBM'에 해당한다.","confidence":0.88}],"non_sensitive_candidates":[],"unlisted_candidates":[],"reason":"출하 계획 테이블 중 HBM 제품 행만 민감하다. DDR5 등 다른 제품 행은 키워드에 해당하지 않는다.","confidence":0.88,"needs_review":false,"review_reason":""}
+{"decision":"sensitive","sensitive_data":[{"type":"row_condition","column_name":"PROD_TYPE","row_condition":"UPPER(PROD_TYPE) LIKE '%HBM%'","matched_keyword_ids":["EX-03"],"evidence":["column_desc","value"],"reason":"제품 유형 값에 HBM3E·HBM3가 있어 HBM 제품 행의 출하 계획이 키워드 'HBM'에 해당한다.","confidence":0.88}],"non_sensitive_candidates":[],"reason":"출하 계획 테이블 중 HBM 제품 행만 민감하다. DDR5 등 다른 제품 행은 키워드에 해당하지 않는다.","confidence":0.88,"needs_review":false,"review_reason":""}
