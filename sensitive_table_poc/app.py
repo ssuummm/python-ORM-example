@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -80,6 +81,17 @@ def cmd_run(a: argparse.Namespace) -> int:
     return 0
 
 
+def format_elapsed(seconds: float) -> str:
+    """초를 '1시간 2분 3.4초' 형태로 바꾼다."""
+    minutes, sec = divmod(seconds, 60)
+    hours, minutes = divmod(int(minutes), 60)
+    if hours:
+        return f"{hours}시간 {minutes}분 {sec:.1f}초"
+    if minutes:
+        return f"{minutes}분 {sec:.1f}초"
+    return f"{sec:.1f}초"
+
+
 def main(argv=None) -> int:
     # 하위 명령 없이 `python app.py [옵션]`으로 실행하면 run으로 처리
     argv = sys.argv[1:] if argv is None else list(argv)
@@ -110,7 +122,11 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
-    return a.func(a)
+    start = time.perf_counter()
+    try:
+        return a.func(a)
+    finally:
+        print(f"\n총 소요 시간: {format_elapsed(time.perf_counter() - start)}")
 
 
 if __name__ == "__main__":
