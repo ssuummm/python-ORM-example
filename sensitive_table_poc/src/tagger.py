@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from itertools import chain
 
 from pydantic import BaseModel, Field, ValidationError
@@ -19,33 +20,21 @@ from .prompt import PROMPT_DIR
 
 log = logging.getLogger(__name__)
 
-# 고위험 유형: 유형명 → 분류 기준.  유형을 바꿀 때는 여기만 고치면 프롬프트와 검증에 함께 반영된다.
-TAG_TYPES = {
-    "전략제품": (
-        "[무엇을 만드나] 전략 제품의 개발·설계·사양·성능·품질 및 고객 인증 정보. "
-        "제외: 제조 공정의 수율·공정 조건(→기술노하우), 제품별 생산·판매 계획(→사업계획)"
-    ),
-    "사업계획": (
-        "[앞으로 무엇을 하나] 회사 내부의 미래 시점 수요 예측, 생산·판매·공급·투자 계획과 목표. "
-        "제외: 이미 발생한 실적, 특정 고객사와 합의한 거래 물량(→영업기밀)"
-    ),
-    "영업기밀": (
-        "[어느 고객과 어떻게 거래하나] 고객사가 식별되는 거래 가격·계약 조건·공급/출하 물량(계획·실적 모두). "
-        "제외: 고객이 식별되지 않는 전체 판매 계획(→사업계획), 원가·이익률(→재무성과)"
-    ),
-    "재무성과": (
-        "[얼마나 남기나] 제품·고객·사업 단위의 원가, 이익, 이익률, 수익성 지표. "
-        "제외: 고객에게 제시한 판매 가격 자체(→영업기밀)"
-    ),
-    "기술노하우": (
-        "[어떻게 만드나] 제조 공정의 상세 수율, 레시피·공정 조건·설비 파라미터, 불량 분석, 신뢰성·테스트 평가 결과. "
-        "제외: 완제품의 사양·성능(→전략제품)"
-    ),
-    "개인정보": (
-        "[누구에 관한 정보인가] 구성원을 식별할 수 있는 정보와 그 구성원의 평가·보상·건강·징계·연락처 정보. "
-        "제외: 개인을 식별할 수 없는 집계 통계"
-    ),
-}
+TAG_PROMPT_FILE = PROMPT_DIR / "tag_prompt.md"
+
+
+def load_tag_prompt() -> tuple[str, list[str]]:
+    """tag_prompt.md를 읽고, '# 고위험 유형' 구역의 "- 유형명: 기준" 줄에서 유형명 목록을 뽑는다.
+
+    유형을 추가·수정할 때는 tag_prompt.md의 '# 고위험 유형' 아래에 "- 유형명: 기준" 한 줄씩 적으면 된다.
+    여기서 뽑은 유형명 목록으로 LLM 응답의 tag 값을 검증한다.
+    """
+    prompt = TAG_PROMPT_FILE.read_text(encoding="utf-8")
+    section = prompt.split("# 고위험 유형", 1)[-1].split("\n# ", 1)[0]   # 다음 '# ' 제목 전까지
+    tag_names = re.findall(r"^- ([^:\n]+?):", section, flags=re.MULTILINE)
+    if not tag_names:
+        raise ValueError(f"{TAG_PROMPT_FILE}에서 고위험 유형('- 유형명: 기준')을 찾지 못함")
+    return prompt, tag_names
 
 
 class TagAnswer(BaseModel):
@@ -81,8 +70,7 @@ class HighRiskTagger:
     def __init__(self, client: LLMClient, settings: Settings):
         self.client = client
         self.s = settings
-        tag_lines = "\n".join(f"- {name}: {rule}" for name, rule in TAG_TYPES.items())
-        self.system_prompt = (PROMPT_DIR / "tag_prompt.md").read_text(encoding="utf-8").replace("{{TAG_TYPES}}", tag_lines)
+        self.system_prompt, self.tag_names = load_tag_prompt()
 
     def tag(self, table: TableMeta, result: TableResult, kw_index: dict[str, Keyword]) -> list[HighRiskTag]:
         """LLM으로 고위험 유형을 고르고, 정해진 유형명만 남겨 돌려준다. 실패하면 ValueError."""
@@ -101,6 +89,6 @@ class HighRiskTagger:
 
         tags = {}
         for t in answer.high_risk_tags:
-            if t.tag in TAG_TYPES and t.tag not in tags:   # 정해진 유형명만, 중복은 처음 것만
+            if t.tag in self.tag_names and t.tag not in tags:   # 정해진 유형명만, 중복은 처음 것만
                 tags[t.tag] = t
         return list(tags.values())

@@ -131,7 +131,7 @@ class SensitiveFinding(BaseModel):
 
 
 class HighRiskTag(BaseModel):
-    tag: str           # 고위험 유형명 (tagger.TAG_TYPES)
+    tag: str           # 고위험 유형명 (prompts/tag_prompt.md)
     reason: str = ""   # 그 유형으로 분류한 근거
 
 
