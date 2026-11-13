@@ -14,6 +14,7 @@ from .parser import parse_decision
 from .postprocess import finalize, merge_decisions
 from .preprocess import KeywordMatcher, build_table_payload, chunk_table, format_hints
 from .prompt import RETRY_SUFFIX, build_system_prompt, build_user_prompt
+from .tagger import HighRiskTagger
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class SensitiveTableClassifier:
         self.s = settings
         self.client = client
         self.system_prompt = build_system_prompt()  # 전 테이블 공통
+        self.tagger = HighRiskTagger(client, settings) if client else None
 
     # ------------------------------------------------------------------
     def _prepare(self, table: TableMeta):
@@ -59,6 +61,17 @@ class SensitiveTableClassifier:
                 prompt = user + RETRY_SUFFIX.format(error=last_err)
         raise ValueError(f"재시도 후에도 응답 파싱 실패: {last_err}")
 
+    def _add_tags(self, table: TableMeta, result: TableResult, kw_index: dict) -> None:
+        """민감 테이블에 고위험 유형 태그를 붙인다. 태그 실패는 error가 아니라 검토 대상으로 둔다."""
+        try:
+            result.high_risk_tags = self.tagger.tag(table, result, kw_index)
+            if not result.high_risk_tags:
+                result.review_reasons.append("고위험 유형 미매핑")
+        except Exception as e:
+            log.warning("태그 매핑 실패: %s (%s)", table.table_id, e)
+            result.review_reasons.append(f"고위험 유형 태그 매핑 실패: {e}")
+        result.needs_review = bool(result.review_reasons)
+
     def classify(self, table: TableMeta) -> TableResult:
         t0 = time.time()
         meta = {"provider": self.s.provider, "model": self.s.model,
@@ -74,7 +87,10 @@ class SensitiveTableClassifier:
                 retries += r
             meta.update(chunks=len(prompts), retries=retries,
                         latency_ms=int((time.time() - t0) * 1000))
-            return finalize(table, merge_decisions(decisions), kw_index, hits, self.s, meta)
+            result = finalize(table, merge_decisions(decisions), kw_index, hits, self.s, meta)
+            if result.decision == "sensitive":
+                self._add_tags(table, result, kw_index)
+            return result
         except Exception as e:  # 한 테이블 실패가 전체 배치를 멈추지 않도록
             log.exception("판단 실패: %s", table.table_id)
             meta["latency_ms"] = int((time.time() - t0) * 1000)

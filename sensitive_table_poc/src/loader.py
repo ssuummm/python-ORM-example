@@ -32,7 +32,7 @@ def load_keywords(path: str) -> list[Keyword]:
     열: sys_cd, keyword, description, equivalent_terms, high_risk_tag, source, source_detail, history
     - sys_cd가 "*"이면 모든 시스템, 아니면 해당 시스템 테이블에만 적용
     - equivalent_terms는 "|"로 구분 (예: Yield|YLD)
-    - source, source_detail은 출처 기록용이라 읽지 않는다.
+    - high_risk_tag, source, source_detail은 기록용이라 읽지 않는다. (고위험 유형은 tagger.py가 LLM으로 매핑)
     - history가 "삭제"인 키워드는 제외한다.
     """
     df = read_txt(path)
@@ -49,7 +49,6 @@ def load_keywords(path: str) -> list[Keyword]:
             keyword=row["keyword"],
             description=row["description"],
             equivalent_terms=equivalent_terms,
-            high_risk_tag=row["high_risk_tag"],
             sys_cd=sys_cd,
         ))
     return keywords

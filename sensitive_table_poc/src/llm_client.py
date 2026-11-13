@@ -103,6 +103,8 @@ class MockClient(LLMClient):
 
     def complete(self, system, user, context=None):
         ctx = context or {}
+        if ctx.get("task") == "tag":    # 태그 LLM 자리: 오프라인 테스트용 고정 응답
+            return json.dumps({"high_risk_tags": []}, ensure_ascii=False)
         groups = defaultdict(list)
         for h in ctx.get("hits", []):
             if h.target != TABLE_TARGET:

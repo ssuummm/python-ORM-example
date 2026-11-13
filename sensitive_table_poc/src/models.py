@@ -15,7 +15,6 @@ class Keyword(BaseModel):
     keyword: str
     description: str = ""
     equivalent_terms: list[str] = Field(default_factory=list)
-    high_risk_tag: str = ""
     sys_cd: str = "*"                                  # "*"이면 모든 시스템에 적용
 
     @property
@@ -119,7 +118,6 @@ class MatchedKeywordInfo(BaseModel):
     keyword_id: str
     keyword: str
     sys_cd: str
-    high_risk_tag: str = ""
 
 
 class SensitiveFinding(BaseModel):
@@ -132,6 +130,11 @@ class SensitiveFinding(BaseModel):
     confidence: float = 0.0
 
 
+class HighRiskTag(BaseModel):
+    tag: str           # 고위험 유형명 (tagger.TAG_TYPES)
+    reason: str = ""   # 그 유형으로 분류한 근거
+
+
 class TableResult(BaseModel):
     table_id: str
     sys_cd: str
@@ -140,6 +143,7 @@ class TableResult(BaseModel):
     non_sensitive_candidates: list[CandidateNote] = Field(default_factory=list)
     reason: str = ""
     confidence: float = 0.0
+    high_risk_tags: list[HighRiskTag] = Field(default_factory=list)
     needs_review: bool = False
     review_reasons: list[str] = Field(default_factory=list)
     validation_warnings: list[str] = Field(default_factory=list)
