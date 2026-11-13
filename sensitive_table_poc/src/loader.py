@@ -3,7 +3,7 @@
 입력 파일은 모두 Excel에서 복사해 붙여넣은 txt(탭으로 구분)라고 가정한다.
 
 - 키워드 파일(keywords.txt) 열: sys_cd, keyword, description, equivalent_terms, high_risk_tag,
-                              source, source_detail
+                              source, source_detail, history
 - 크롤링 결과 파일 열: table_name, table_desc, sys_cd, schema, column_name, column_desc,
                       equivalent_columns, std_term, std_term_desc, data_type
 """
@@ -29,13 +29,15 @@ def read_txt(path: str) -> pd.DataFrame:
 def load_keywords(path: str) -> list[Keyword]:
     """keywords.txt를 읽는다.
 
-    열: sys_cd, keyword, description, equivalent_terms, high_risk_tag, source, source_detail
+    열: sys_cd, keyword, description, equivalent_terms, high_risk_tag, source, source_detail, history
     - sys_cd가 "*"이면 모든 시스템, 아니면 해당 시스템 테이블에만 적용
     - equivalent_terms는 "|"로 구분 (예: Yield|YLD)
     - source, source_detail은 출처 기록용이라 읽지 않는다.
+    - history가 "삭제"인 키워드는 제외한다.
     """
     df = read_txt(path)
     df = df[df["keyword"] != ""]                             # 키워드가 빈 행 제거
+    df = df[df["history"] != "삭제"]                         # history가 '삭제'인 키워드 제외
     df = df.drop_duplicates(subset=["sys_cd", "keyword"])    # 같은 시스템의 같은 키워드 중복 제거
 
     keywords = []
