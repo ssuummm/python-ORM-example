@@ -1,0 +1,559 @@
+# 26.11.05 추가 / 26.11.15 개정 — 신규(미등록) 컬럼 체크
+#
+# [판정 원칙]
+#   원본 SQL 이 Oracle 에서 유효하다면, 참조된 컬럼은 보이는 테이블 중 어딘가에 반드시 있다.
+#   그러므로 "보이는 테이블 전부에 그 컬럼이 없다"고 확신할 수 있을 때만 에러를 낸다.
+#   조금이라도 확신할 수 없으면 에러를 내지 않는다 (오탐 방지).
+#
+# [용어]
+#   source : FROM / JOIN 에 나오는 테이블, 인라인 뷰, CTE, LATERAL 서브쿼리
+#   scope  : 하나의 SELECT 블록 (sqlglot 이 만들어 주는 단위)
+#
+# [판정 결과는 세 가지]
+#   _YES     : source 가 그 컬럼을 가진다 (또는 가질 수 있다)
+#   _NO      : source 가 그 컬럼을 갖지 않는다고 확정
+#   _UNKNOWN : 알 수 없다
+
+_YES = "YES"
+_NO = "NO"
+_UNKNOWN = "UNKNOWN"
+
+# 실제 컬럼명이 될 수 없는 의사 컬럼 — e.ROWID 처럼 한정해도 항상 제외
+_ALWAYS_PSEUDO_COLUMNS = {"ROWNUM", "ROWID", "LEVEL", "ORA_ROWSCN"}
+
+# 괄호 없이 쓰는 내장 함수 — 한정자 없이 쓸 때만 제외
+_NO_PAREN_BUILTINS = {
+    "USER", "UID", "SYSDATE", "SYSTIMESTAMP", "CURRENT_DATE",
+    "CURRENT_TIMESTAMP", "LOCALTIMESTAMP", "SESSIONTIMEZONE", "DBTIMEZONE",
+    "ORA_INVOKING_USER", "ORA_INVOKING_USERID",
+}
+
+# CONNECT BY 가 있는 SELECT 블록에서만 의사 컬럼
+_CONNECT_BY_PSEUDO_COLUMNS = {"CONNECT_BY_ISLEAF", "CONNECT_BY_ISCYCLE"}
+
+# VERSIONS / AS OF 절이 붙은 테이블이 있는 SELECT 블록에서만 의사 컬럼
+_VERSIONS_PSEUDO_COLUMNS = {
+    "VERSIONS_STARTTIME", "VERSIONS_ENDTIME", "VERSIONS_STARTSCN",
+    "VERSIONS_ENDSCN", "VERSIONS_XID", "VERSIONS_OPERATION",
+}
+
+# 괄호 없이 호출하는 사용자 함수 (신규 컬럼과 구분할 수 없음) — 대문자로 등록
+_NO_PAREN_FUNCTION_ALLOWLIST: Set[str] = set()
+
+# 참고: OBJECT_ID / OBJECT_VALUE / COLUMN_VALUE / NEXTVAL / CURRVAL 은 일반 컬럼처럼
+# 검사한다 (정책 대상에 object table 이 없다는 전제). 전제가 깨지면
+# OBJECT_ID, OBJECT_VALUE 를 _ALWAYS_PSEUDO_COLUMNS 에 추가한다.
+
+_SET_OPS = (exp.Union, exp.Intersect, exp.Except)
+
+# 인라인 뷰 → 인라인 뷰 → ... 를 따라 내려가는 최대 깊이 (무한 재귀 방지)
+_MAX_DEPTH = 30
+
+
+def _check_unregistered_columns(
+    tree: exp.Expression, policy: Policy, cte_names: Set[str]
+) -> None:
+    """보이는 source 어디에도 없다고 확정되는 컬럼이 있으면 ColumnPolicyMissingError.
+
+    - 한정 참조 (E.COL)  : alias 가 가리키는 source 로 판정 (대소문자 무시)
+    - 비한정 참조 (COL)  : FROM/JOIN 의 모든 source 에 없고, 상관 서브쿼리라면
+                           바깥 쿼리 source 에도 없을 때만 에러
+    - USING 절, PIVOT/UNPIVOT 절 안의 컬럼도 검사
+    - 의사 컬럼, 괄호 없는 내장 함수, ORDER BY / GROUP BY alias 는 제외
+    """
+    checker = _UnregisteredColumnChecker(tree, policy, cte_names)
+    checker.run()
+
+
+class _UnregisteredColumnChecker:
+    """한 SQL 에 대한 검사 1회분. 같은 계산을 반복하지 않도록 결과를 저장해 둔다."""
+
+    def __init__(self, tree: exp.Expression, policy: Policy, cte_names: Set[str]):
+        self.tree = tree
+        self.policy = policy
+        self.cte_names = cte_names
+
+        # SELECT 노드 → scope
+        self.scope_of: Dict[int, Scope] = {}
+        root_scope = build_scope(tree)
+        if root_scope is not None:
+            for scope in root_scope.traverse():
+                self.scope_of[id(scope.expression)] = scope
+
+        # 캐시 (key 는 id(...) — 같은 노드면 같은 결과)
+        self._sources_cache: Dict[int, Optional[list]] = {}
+        self._names_cache: Dict[int, Optional[dict]] = {}
+        self._has_pivot_cache: Dict[int, bool] = {}
+        self._flashback_cache: Dict[int, bool] = {}
+        self._source_has_cache: Dict[Tuple[str, int, int], str] = {}
+
+    # =========================================================================
+    # 1. 진입점
+    # =========================================================================
+
+    def run(self) -> None:
+        if not self.scope_of:
+            return
+        for col in self.tree.find_all(exp.Column):
+            self._check_column(col)
+        for join in self.tree.find_all(exp.Join):
+            self._check_using(join)
+
+    def _check_column(self, col: exp.Column) -> None:
+        # (1) 컬럼이 아닌 것은 건너뛴다
+        if col.is_star or isinstance(col.this, exp.Star):
+            return
+        if isinstance(col.parent, exp.Partition):          # PARTITION (P2024)
+            return
+        if col.find_ancestor(exp.MatchRecognize) is not None:  # 패턴 변수 A.COL
+            return
+
+        # (2) 이 컬럼이 속한 SELECT 블록을 찾는다
+        owner = col.find_ancestor(exp.Select, *_SET_OPS)
+        if not isinstance(owner, exp.Select):
+            return      # SetOp 전체의 ORDER BY → 첫 branch 의 출력 이름만 참조 가능
+        scope = self.scope_of.get(id(owner))
+        if scope is None:
+            return
+
+        # (3) 의사 컬럼 / 괄호 없는 함수
+        if self._is_not_a_column(col, owner):
+            return
+
+        # (4) PIVOT / UNPIVOT 절 안의 컬럼
+        pivot = col.find_ancestor(exp.Pivot)
+        if pivot is not None and not _is_descendant_of(owner, pivot):
+            self._check_pivot_column(col, pivot)
+            return
+
+        # (5) PIVOT 결과를 참조하는 컬럼은 출력 컬럼을 알 수 없다
+        if self._scope_has_pivot(scope):
+            return
+
+        # (6) SELECT 목록의 alias 를 ORDER BY / GROUP BY 에서 참조한 것
+        if _is_order_by_output_alias(col, owner) or _is_group_by_alias(col, owner):
+            return
+
+        # (7) 실제 검사
+        if col.table:
+            self._check_qualified(col, scope)
+        else:
+            self._check_unqualified(col, scope)
+
+    # =========================================================================
+    # 2. 검사 종류별 로직
+    # =========================================================================
+
+    def _check_qualified(self, col: exp.Column, scope: Scope) -> None:
+        """E.COL — E 가 가리키는 source 하나만 본다."""
+        # E.DOC.city 같은 JSON dot / 객체 속성 표기는 검사하지 않는다
+        for part in ("db", "catalog"):
+            ident = col.args.get(part)
+            if ident is not None and self._find_source(ident.name, scope) is not None:
+                return
+
+        found = self._find_source(col.table, scope)
+        if not found:
+            return      # 시퀀스, 패키지 상수, PIVOT alias 등 source 가 아닌 한정자
+        node, src = found
+        if self._source_has(col.name, node, src) == _NO:
+            self._raise(col.name, [src])
+
+    def _check_unqualified(self, col: exp.Column, scope: Scope) -> None:
+        """COL — FROM/JOIN 의 모든 source 와 (상관 서브쿼리면) 바깥 source 를 본다."""
+        sources = self._sources(scope)
+        if not sources:
+            return
+        for node, src in sources:
+            if self._source_has(col.name, node, src) != _NO:
+                return  # 한 곳이라도 가질 수 있으면 통과
+        if self._visible_in_outer_query(col.name, scope):
+            return
+        self._raise(col.name, [src for _, src in sources])
+
+    def _check_pivot_column(self, col: exp.Column, pivot: exp.Pivot) -> None:
+        """PIVOT 의 집계 인자·FOR 컬럼, UNPIVOT 의 IN 목록 컬럼은 원본 source 의 컬럼이다."""
+        if col.table:
+            return
+        holder = pivot.parent      # PIVOT 이 붙은 테이블 또는 서브쿼리
+        if holder is None or len(holder.args.get("pivots") or []) != 1:
+            return
+
+        # PIVOT 이면 IN 목록 밖, UNPIVOT 이면 IN 목록 안의 컬럼만 원본 컬럼이다
+        is_unpivot = bool(pivot.args.get("unpivot"))
+        if _is_in_value_list(col, pivot) != is_unpivot:
+            return
+
+        if isinstance(holder, exp.Table):
+            result = self._table_has(col.name, holder)
+            sources = [holder]
+        elif isinstance(holder, exp.Subquery):
+            inner_scope = self.scope_of.get(id(holder.this))
+            if inner_scope is None:
+                return
+            result = self._scope_has(col.name, inner_scope, 0)
+            sources = [inner_scope]
+        else:
+            return
+
+        if result == _NO:
+            self._raise(col.name, sources)
+
+    def _check_using(self, join: exp.Join) -> None:
+        """JOIN ... USING (COL) — COL 은 오른쪽 source 와 왼쪽 source 양쪽에 있어야 한다."""
+        using = join.args.get("using")
+        select = join.parent
+        if not using or not isinstance(select, exp.Select):
+            return
+        scope = self.scope_of.get(id(select))
+        if scope is None or self._scope_has_pivot(scope):
+            return
+        sources = self._sources(scope)
+        if not sources:
+            return
+
+        # 이 JOIN 과 그 뒤의 JOIN 에 나오는 노드 = 아직 조인되지 않은 쪽
+        later_nodes = set()
+        reached = False
+        for other in select.args.get("joins") or []:
+            if other is join:
+                reached = True
+            if reached and other.this is not None:
+                later_nodes.add(id(other.this))
+                later_nodes.add(id(other.this.unnest()))
+
+        right = [(n, s) for n, s in sources if _is_join_item(n, join.this)]
+        left = [(n, s) for n, s in sources if id(n) not in later_nodes]
+        if len(right) != 1 or not left:
+            return
+        right_node, right_src = right[0]
+
+        for ident in using:
+            name = ident.name
+            if not name:
+                continue
+            if self._source_has(name, right_node, right_src) == _NO:
+                self._raise(name, [right_src])
+            if all(self._source_has(name, n, s) == _NO for n, s in left):
+                self._raise(name, [s for _, s in left])
+
+    # =========================================================================
+    # 3. 제외 규칙
+    # =========================================================================
+
+    def _is_not_a_column(self, col: exp.Column, owner: exp.Select) -> bool:
+        """의사 컬럼이나 괄호 없는 함수처럼 컬럼이 아닌 이름인가. ("..." 는 항상 컬럼)"""
+        if _is_quoted_column(col):
+            return False
+        name = col.name.upper()
+        if name in _ALWAYS_PSEUDO_COLUMNS:
+            return True
+        if col.table:
+            return False
+        if name in _NO_PAREN_BUILTINS or name in _NO_PAREN_FUNCTION_ALLOWLIST:
+            return True
+        if name in _CONNECT_BY_PSEUDO_COLUMNS:
+            return owner.args.get("connect") is not None
+        if name in _VERSIONS_PSEUDO_COLUMNS:
+            return self._has_flashback_table(owner)
+        return False
+
+    def _has_flashback_table(self, owner: exp.Select) -> bool:
+        """이 SELECT 블록의 테이블 중 VERSIONS / AS OF 절이 붙은 것이 있는가."""
+        key = id(owner)
+        if key not in self._flashback_cache:
+            self._flashback_cache[key] = any(
+                table.args.get("version") is not None
+                for table in owner.find_all(exp.Table)
+                if table.find_ancestor(exp.Select) is owner
+            )
+        return self._flashback_cache[key]
+
+    def _scope_has_pivot(self, scope: Scope) -> bool:
+        """이 SELECT 블록의 FROM 에 PIVOT / UNPIVOT 이 붙어 있는가."""
+        key = id(scope)
+        if key not in self._has_pivot_cache:
+            expr = scope.expression
+            self._has_pivot_cache[key] = isinstance(expr, exp.Select) and any(
+                pivot.find_ancestor(exp.Select) is expr
+                for pivot in expr.find_all(exp.Pivot)
+            )
+        return self._has_pivot_cache[key]
+
+    # =========================================================================
+    # 4. source 목록 / 이름 찾기
+    # =========================================================================
+
+    def _sources(self, scope: Scope) -> Optional[list]:
+        """이 SELECT 블록의 FROM/JOIN 에 실제로 나열된 source 의 [(node, source)].
+
+        scope.sources 는 '보이기만 하는' CTE 까지 포함하므로 쓰지 않는다.
+        목록을 확신할 수 없으면 None 을 돌려준다 (호출측은 검사하지 않는다).
+        """
+        key = id(scope)
+        if key not in self._sources_cache:
+            self._sources_cache[key] = _list_selected_sources(scope)
+        return self._sources_cache[key]
+
+    def _sources_by_name(self, scope: Scope) -> Optional[dict]:
+        """{대문자 alias: (node, source)}. 목록을 만들 수 없으면 None."""
+        key = id(scope)
+        if key not in self._names_cache:
+            try:
+                selected = scope.selected_sources   # alias 가 중복되면 예외
+            except Exception:
+                self._names_cache[key] = None
+            else:
+                by_name: dict = {}
+                for name, pair in selected.items():
+                    by_name.setdefault(str(name).upper(), pair)
+                self._names_cache[key] = by_name
+        return self._names_cache[key]
+
+    def _find_source(self, qualifier: str, scope: Scope):
+        """한정자(alias/테이블명)가 가리키는 (node, source) 를 안쪽 블록부터 찾는다.
+
+        못 찾으면 None, 중간 블록의 source 목록을 확신할 수 없으면 False.
+        """
+        wanted = qualifier.upper()
+        current: Optional[Scope] = scope
+        while current is not None:
+            by_name = self._sources_by_name(current)
+            if by_name is None:
+                return False
+            if wanted in by_name:
+                return by_name[wanted]
+            current = current.parent
+        return None
+
+    def _visible_in_outer_query(self, col_name: str, scope: Scope) -> bool:
+        """상관 참조로 바깥 쿼리의 컬럼일 가능성이 있는가.
+
+        WHERE/SELECT 안의 서브쿼리와 LATERAL 은 자신을 품은 블록의 source 를 볼 수 있다.
+        SetOp branch · 인라인 뷰 · CTE 는 바로 바깥 블록은 못 보지만, 그 블록이
+        상관 서브쿼리 안에 있으면 더 바깥은 볼 수 있으므로 한 단계 올라가기만 한다.
+        """
+        child = scope
+        while child.parent is not None:
+            parent = child.parent
+            kind = str(getattr(child.scope_type, "name", child.scope_type)).upper()
+            if kind in ("SUBQUERY", "UDTF"):
+                sources = self._sources(parent)
+                if sources is None:
+                    return True
+                for node, src in sources:
+                    if src is not child and self._source_has(col_name, node, src) != _NO:
+                        return True
+            child = parent
+        return False
+
+    # =========================================================================
+    # 5. source 가 컬럼을 갖는가 → _YES / _NO / _UNKNOWN
+    # =========================================================================
+
+    def _source_has(self, col_name: str, node, src, depth: int = 0) -> str:
+        key = (col_name.upper(), id(node), id(src))
+        if key not in self._source_has_cache:
+            self._source_has_cache[key] = self._compute_source_has(
+                col_name, node, src, depth
+            )
+        return self._source_has_cache[key]
+
+    def _compute_source_has(self, col_name: str, node, src, depth: int) -> str:
+        if depth > _MAX_DEPTH:
+            return _UNKNOWN
+        # PIVOT / UNPIVOT 이 붙은 source 는 출력 컬럼을 알 수 없다
+        for holder in (node, getattr(node, "parent", None)):
+            if isinstance(holder, (exp.Table, exp.Subquery)) and holder.args.get("pivots"):
+                return _UNKNOWN
+        if isinstance(src, exp.Table):
+            return self._table_has(col_name, src)
+        if isinstance(src, Scope):
+            return self._scope_has(col_name, src, depth)
+        return _UNKNOWN
+
+    def _table_has(self, col_name: str, table: exp.Table) -> str:
+        """물리 테이블 → 정책의 all_columns 로 판정."""
+        if not isinstance(table.this, exp.Identifier):
+            return _UNKNOWN                     # TABLE(...), JSON_TABLE, XMLTABLE
+        if not (table.args.get("db") or table.args.get("catalog")):
+            name = table.name.upper()
+            if name == "DUAL":
+                return _UNKNOWN
+            if name in self.cte_names:
+                # scope 로 풀리지 않은 CTE 이름 = 재귀 CTE 의 자기참조
+                columns = _recursive_cte_columns(table, name)
+                if columns and col_name.upper() in columns:
+                    return _YES
+                return _UNKNOWN
+        tp = self.policy.for_table(table_source_name(table))
+        if tp is None:
+            return _UNKNOWN
+        return _YES if tp.has_column(col_name) else _NO
+
+    def _scope_has(self, col_name: str, scope: Scope, depth: int) -> str:
+        """인라인 뷰 / CTE / LATERAL → SELECT 목록과 그 아래 source 로 판정."""
+        if depth > _MAX_DEPTH:
+            return _UNKNOWN
+        upper = col_name.upper()
+        expr = scope.expression
+
+        # LATERAL / CROSS APPLY → 안쪽 SELECT 로 판정
+        if isinstance(expr, exp.Lateral):
+            inner = expr.this.unnest() if expr.this is not None else None
+            inner_scope = self.scope_of.get(id(inner)) if inner is not None else None
+            if inner_scope is None:
+                return _UNKNOWN                 # JSON_TABLE, TABLE(...) 등
+            return self._scope_has(col_name, inner_scope, depth + 1)
+
+        holder = expr.parent                    # CTE 또는 Subquery 노드
+        alias_columns = _alias_column_names(holder)
+
+        # UNION 등 → 컬럼 이름은 맨 왼쪽 SELECT 가 정한다
+        select_scope = scope
+        while isinstance(expr, _SET_OPS):
+            expr = expr.this.unnest() if expr.this is not None else None
+            select_scope = self.scope_of.get(id(expr)) if expr is not None else None
+            if select_scope is None:
+                return _UNKNOWN
+        if not isinstance(expr, exp.Select):
+            return _UNKNOWN
+
+        has_unnamed_expression = False
+        if alias_columns is not None:
+            # WITH c(a, b) AS (...) → 컬럼 이름은 a, b
+            if upper in alias_columns:
+                return _YES
+            # SEARCH / CYCLE 절은 alias 목록에 없는 컬럼을 덧붙인다
+            with_clause = holder.parent if isinstance(holder, exp.CTE) else None
+            if with_clause is not None and (
+                with_clause.args.get("search") or with_clause.args.get("cycle")
+            ):
+                return _UNKNOWN
+        else:
+            for projection in expr.expressions:
+                if isinstance(projection, exp.Star):
+                    continue
+                if isinstance(projection, exp.Column) and projection.is_star:
+                    continue
+                name = _projection_name(projection)
+                if name is None:
+                    has_unnamed_expression = True   # COUNT(*) 처럼 이름이 없는 식
+                elif name == upper:
+                    return _YES
+
+        # SELECT 목록에 없으면 아래 source 로 판정한다.
+        # (* 가 없어도 아래 source 가 가지면 '가질 수 있음'으로 둔다 — 오탐 방지)
+        sources = self._sources(select_scope)
+        if sources is None:
+            return _UNKNOWN
+        result = _NO
+        for node, src in sources:
+            answer = self._source_has(col_name, node, src, depth + 1)
+            if answer == _YES:
+                return _YES
+            if answer == _UNKNOWN:
+                result = _UNKNOWN
+        if result == _NO and has_unnamed_expression:
+            return _UNKNOWN
+        return result
+
+    # =========================================================================
+    # 6. 에러
+    # =========================================================================
+
+    def _raise(self, col_name: str, sources: list) -> None:
+        """후보 테이블이 여러 개면 'EMP, DEPT' 처럼 이어 붙여 전달한다."""
+        tables: List[str] = []
+        for src in sources:
+            if isinstance(src, exp.Table):
+                candidates = [src]
+            elif isinstance(src, Scope):
+                candidates = list(src.expression.find_all(exp.Table))
+            else:
+                candidates = []
+            for table in candidates:
+                if not isinstance(table.this, exp.Identifier):
+                    continue
+                tp = self.policy.for_table(table_source_name(table))
+                if tp is not None and tp.table not in tables:
+                    tables.append(tp.table)
+        raise ColumnPolicyMissingError(", ".join(tables), col_name.upper())
+
+
+# =============================================================================
+# 상태가 필요 없는 작은 헬퍼들
+# =============================================================================
+
+def _list_selected_sources(scope: Scope) -> Optional[list]:
+    """scope 의 FROM/JOIN source 목록. 확신할 수 없으면 None."""
+    expr = scope.expression
+    if not isinstance(expr, exp.Select):
+        return []
+    try:
+        selected = scope.selected_sources       # alias 가 중복되면 예외
+        references = scope.references
+    except Exception:
+        return None
+
+    from_clause = expr.args.get("from_") or expr.args.get("from")
+    item_count = (1 if from_clause is not None else 0) + len(expr.args.get("joins") or [])
+    if len(selected) != len(references) or len(selected) < item_count:
+        return None                             # alias 없는 인라인 뷰 2개 등
+    if len({str(name).upper() for name in selected}) != len(selected):
+        return None                             # 대소문자만 다른 alias
+    return list(selected.values())
+
+
+def _is_group_by_alias(col: exp.Column, select: exp.Select) -> bool:
+    """GROUP BY / HAVING 에서 SELECT 목록의 alias 를 참조했는가 (Oracle 23ai)."""
+    if col.table:
+        return False
+    name = col.name.upper()
+    is_alias = any(
+        isinstance(p, exp.Alias) and p.alias.upper() == name
+        for p in select.expressions
+    )
+    if not is_alias:
+        return False
+    for key in ("group", "having"):
+        clause = select.args.get(key)
+        if clause is not None and _is_descendant_of(col, clause):
+            return True
+    return False
+
+
+def _is_in_value_list(col: exp.Column, pivot: exp.Pivot) -> bool:
+    """컬럼이 PIVOT/UNPIVOT 의 IN ( ... ) 목록 안에 있는가."""
+    node: Optional[exp.Expression] = col
+    while node is not None and node is not pivot:
+        if node.arg_key == "expressions" and isinstance(node.parent, exp.In):
+            return True
+        node = node.parent
+    return False
+
+
+def _is_join_item(node: exp.Expression, item: Optional[exp.Expression]) -> bool:
+    """node 가 JOIN 오른쪽에 나온 그 테이블/서브쿼리인가."""
+    return item is not None and (node is item or node is item.unnest())
+
+
+def _alias_column_names(holder: Optional[exp.Expression]) -> Optional[Set[str]]:
+    """WITH c(x, y) AS (...) 처럼 컬럼명을 재지정했으면 {"X", "Y"}, 아니면 None."""
+    if holder is None:
+        return None
+    alias = holder.args.get("alias")
+    columns = alias.args.get("columns") if alias is not None else None
+    if not columns:
+        return None
+    return {c.name.upper() for c in columns}
+
+
+def _recursive_cte_columns(table: exp.Table, name: str) -> Optional[Set[str]]:
+    """재귀 CTE 안에서 자기 자신을 참조할 때, 그 CTE 의 alias 컬럼 목록."""
+    cte = table.find_ancestor(exp.CTE)
+    while cte is not None:
+        if cte.alias.upper() == name:
+            return _alias_column_names(cte)
+        cte = cte.find_ancestor(exp.CTE)
+    return None
