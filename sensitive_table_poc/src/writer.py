@@ -1,11 +1,12 @@
-"""결과 저장: results.jsonl(상세, 이어쓰기) + result_MMDDHHMM.csv(검토용, Excel 호환)."""
+"""결과 저장: results.jsonl(상세) + result_MMDDHHMM.xlsx(검토용 엑셀)."""
 from __future__ import annotations
 
-import csv
 import json
 import threading
 from datetime import datetime
 from pathlib import Path
+
+import pandas as pd
 
 from .models import TableResult
 
@@ -43,39 +44,44 @@ class ResultWriter:
 
 
 def format_tags(result: dict) -> tuple[str, str]:
-    """high_risk_tags를 CSV용 (유형명 "|" 결합, "유형: 근거" 결합) 두 문자열로 바꾼다."""
+    """high_risk_tags를 엑셀용 (유형명 "|" 결합, "유형: 근거" 결합) 두 문자열로 바꾼다."""
     tags = result.get("high_risk_tags", [])
     names = "|".join(t["tag"] for t in tags)
     reasons = " | ".join(f'{t["tag"]}: {t["reason"]}' for t in tags)
     return names, reasons
 
 
+SUMMARY_COLUMNS = ["table_id", "sys_cd", "decision", "confidence",
+                   "sensitive_columns", "row_conditions", "matched_keywords",
+                   "high_risk_tag", "high_risk_tag_reason",                    # tagger 결과
+                   "needs_review", "review_reasons", "reason", "error"]
+
+
 def write_summary(out_dir: Path) -> Path:
+    """results.jsonl을 검토용 엑셀 파일(result_MMDDHHMM.xlsx)로 저장한다."""
     latest: dict[str, dict] = {}
     for line in (out_dir / "results.jsonl").read_text(encoding="utf-8").splitlines():
         if line.strip():
             r = json.loads(line)
             latest[r["table_id"]] = r          # 재처리 시 마지막 결과 우선
-    timestamp = datetime.now().strftime("%m%d%H%M")   # 월·일·시·분, 예: 11131401
-    path = out_dir / f"result_{timestamp}.csv"
-    with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["table_id", "sys_cd", "decision", "confidence",
-                    "sensitive_columns", "row_conditions", "matched_keywords",
-                    "high_risk_tag", "high_risk_tag_reason",                    # tagger 결과
-                    "needs_review", "review_reasons", "reason", "error"])
-        for r in latest.values():
-            sd = r.get("sensitive_data", [])
-            tag_names, tag_reasons = format_tags(r)
-            w.writerow([
-                r["table_id"], r["sys_cd"], r["decision"], r.get("confidence"),
-                " | ".join(s["column_name"] for s in sd if s["type"] == "column"),
-                " | ".join(s["row_condition"] or "" for s in sd if s["type"] == "row_condition"),
-                " | ".join(sorted({f'{m["keyword_id"]}:{m["keyword"]}' for s in sd for m in s["matched_keywords"]})),
-                tag_names, tag_reasons,                                         # tagger 결과
-                r.get("needs_review"), " | ".join(r.get("review_reasons", [])),
-                r.get("reason", ""), r.get("error") or "",
-            ])
+
+    rows = []
+    for r in latest.values():
+        sd = r.get("sensitive_data", [])
+        tag_names, tag_reasons = format_tags(r)
+        rows.append([
+            r["table_id"], r["sys_cd"], r["decision"], r.get("confidence"),
+            " | ".join(s["column_name"] for s in sd if s["type"] == "column"),
+            " | ".join(s["row_condition"] or "" for s in sd if s["type"] == "row_condition"),
+            " | ".join(sorted({f'{m["keyword_id"]}:{m["keyword"]}' for s in sd for m in s["matched_keywords"]})),
+            tag_names, tag_reasons,                                             # tagger 결과
+            r.get("needs_review"), " | ".join(r.get("review_reasons", [])),
+            r.get("reason", ""), r.get("error") or "",
+        ])
+
+    timestamp = datetime.now().strftime("%m%d%H%M")   # 월·일·시·분, 예: 11181647
+    path = out_dir / f"result_{timestamp}.xlsx"
+    pd.DataFrame(rows, columns=SUMMARY_COLUMNS).to_excel(path, index=False, sheet_name="result")
     return path
 
 

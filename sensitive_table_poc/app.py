@@ -3,13 +3,13 @@
 
 실행: python app.py
 - 입력: data/datalake_crawling_result.txt, data/keywords.txt
-- 출력: output/results.jsonl, output/result_MMDDHHMM.csv
+- 출력: output/results.jsonl, output/result_MMDDHHMM.xlsx
+- 실행하면 브라우저에 로컬 UI(ui.py)가 열린다
 - LLM 연결 정보는 환경변수(LLM_PROVIDER, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY)로 지정
 """
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,12 +29,16 @@ OUT_DIR = ROOT / "output"
 WORKERS = 4                     # 동시에 처리할 테이블 수
 
 
-def run() -> int:
+def run(workers: int = WORKERS, on_result=None, stop_event=None) -> Path | None:
+    """파이프라인 전체 실행. 결과 엑셀 경로를 돌려준다.
+
+    on_result : 테이블 1건이 끝날 때마다 호출할 함수 (UI 진행 상황 표시용)
+    stop_event: threading.Event. 설정되면 아직 시작하지 않은 테이블은 취소하고 멈춘다
+    """
     missing = [str(p) for p in (TABLES_FILE, KEYWORDS_FILE) if not p.exists()]
     if missing:
-        print("입력 파일이 없습니다:\n  " + "\n  ".join(missing))
-        print("data/ 폴더에 datalake_crawling_result.txt, keywords.txt를 넣어주세요.")
-        return 1
+        logging.error("입력 파일이 없습니다: %s", ", ".join(missing))
+        return None
     s = load_settings()
     keywords = load_keywords(KEYWORDS_FILE)
     tables = load_tables(TABLES_FILE)
@@ -42,7 +46,7 @@ def run() -> int:
 
     clf = SensitiveTableClassifier(keywords, s, create_client(s))
     counts: Counter = Counter()
-    with ResultWriter(OUT_DIR, append=False) as w, ThreadPoolExecutor(max_workers=WORKERS) as ex:
+    with ResultWriter(OUT_DIR, append=False) as w, ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(clf.classify, t): t for t in tables}
         for i, f in enumerate(as_completed(futs), 1):
             r = f.result()
@@ -51,10 +55,17 @@ def run() -> int:
             counts["needs_review"] += r.needs_review
             logging.info("[%d/%d] %-32s %-13s conf=%.2f review=%s", i, len(tables),
                          r.table_id, r.decision, r.confidence, r.needs_review)
+            if on_result:
+                on_result(r)
+            if stop_event is not None and stop_event.is_set():
+                for pending in futs:
+                    pending.cancel()        # 아직 시작하지 않은 테이블은 취소 (처리 중인 건은 끝까지 기다림)
+                logging.warning("사용자가 실행을 중지함: %d/%d 처리 후 중단", i, len(tables))
+                break
     summary = write_summary(OUT_DIR)
-    print(f"\n완료: {dict(counts)}")
-    print(f"결과: {OUT_DIR / 'results.jsonl'}\n요약: {summary}")
-    return 0
+    logging.info("완료: %s", dict(counts))
+    logging.info("결과 파일: %s", summary)
+    return summary
 
 
 def format_elapsed(seconds: float) -> str:
@@ -69,13 +80,15 @@ def format_elapsed(seconds: float) -> str:
 
 
 def main() -> int:
+    """UI 없이 터미널에서만 실행할 때 사용 (python -c "import app; app.main()")."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     start = time.perf_counter()
     try:
-        return run()
+        return 0 if run() else 1
     finally:
         print(f"\n총 소요 시간: {format_elapsed(time.perf_counter() - start)}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from ui import launch      # python app.py → 로컬 UI 실행
+    launch()
