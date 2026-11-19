@@ -16,12 +16,14 @@ import gradio as gr
 import pandas as pd
 
 import app
-from src.config import load_settings
 from src.loader import load_tables, read_txt
 from src.prompt import PROMPT_DIR
 
 KEYWORDS_FILE = app.KEYWORDS_FILE
 PROMPT_FILES = {"system": PROMPT_DIR / "system_prompt.md", "tag": PROMPT_DIR / "tag_prompt.md"}
+MODELS = ["HCP-LLM-Latest", "HCP-Medium-Latest", "HCP-Small-Latest"]   # 첫 번째가 기본값
+REASONING_EFFORTS = ["low", "high", "xhigh"]
+DEFAULT_EFFORT = "high"
 PREVIEW_COLUMNS = ["table_id", "sys_cd", "decision", "sensitive_columns", "row_conditions",
                    "high_risk_tag", "needs_review"]
 
@@ -111,10 +113,21 @@ def save_keywords(df: pd.DataFrame):
         gr.Warning("equivalent_terms에 '/' 또는 ','가 있습니다. 여러 표현은 '|'로 구분해야 합니다: "
                    + ", ".join(bad_sep["keyword"].head(5)))
 
+    saved = clean_keywords(load_keywords_df())
+    if df.reset_index(drop=True).equals(saved.reset_index(drop=True)):
+        gr.Info("변경된 내용이 없어 저장하지 않았습니다.")
+        return df, keyword_counts(df)
+
     backup(KEYWORDS_FILE)
     df.to_csv(KEYWORDS_FILE, sep="\t", index=False, encoding="utf-8-sig")
     gr.Info(f"keywords.txt 저장 완료 ({len(df)}행, 이전 파일은 data/backup/에 보관)")
     return df, keyword_counts(df)
+
+
+def add_keyword_row(df: pd.DataFrame) -> pd.DataFrame:
+    """표 맨 아래에 빈 행 하나를 추가한다."""
+    empty = pd.DataFrame([[""] * len(df.columns)], columns=df.columns)
+    return pd.concat([df, empty], ignore_index=True)
 
 
 def reload_keywords():
@@ -129,36 +142,31 @@ def read_prompt(key: str) -> str:
     return PROMPT_FILES[key].read_text(encoding="utf-8")
 
 
-def save_prompt(key: str, text: str) -> str:
+def save_prompts(system_text: str, tag_text: str) -> str:
+    """두 프롬프트를 한 번에 저장한다. 바뀐 파일만 백업 후 저장한다."""
     if STATE.running:
         raise gr.Error("실행 중에는 저장할 수 없습니다.")
-    backup(PROMPT_FILES[key])
-    PROMPT_FILES[key].write_text(text, encoding="utf-8")
-    gr.Info(f"{PROMPT_FILES[key].name} 저장 완료 (이전 버전은 prompts/backup/에 보관)")
-    return f"저장됨 · {datetime.now():%H:%M:%S} · {len(text.splitlines())}줄"
+    changed = []
+    for key, text in (("system", system_text), ("tag", tag_text)):
+        if text == read_prompt(key):
+            continue                                   # 변경 없음: 저장·백업 안 함
+        backup(PROMPT_FILES[key])
+        PROMPT_FILES[key].write_text(text, encoding="utf-8")
+        changed.append(PROMPT_FILES[key].name)
+    if not changed:
+        gr.Info("변경된 내용이 없어 저장하지 않았습니다.")
+        return "변경 없음"
+    gr.Info(f"{', '.join(changed)} 저장 완료 (이전 버전은 prompts/backup/에 보관)")
+    return f"저장됨 · {datetime.now():%H:%M:%S} · {', '.join(changed)}"
+
+
+def reload_prompts():
+    return read_prompt("system"), read_prompt("tag")
 
 
 # =====================================================================
 # ③ 실행 · 결과
 # =====================================================================
-def readiness() -> str:
-    """실행 전 점검 표."""
-    lines = []
-    if app.TABLES_FILE.exists():
-        lines.append(f"| datalake_crawling_result.txt | ✅ 테이블 {len(load_tables(app.TABLES_FILE))}개 |")
-    else:
-        lines.append("| datalake_crawling_result.txt | ❌ 파일 없음 |")
-    if KEYWORDS_FILE.exists():
-        df = load_keywords_df()
-        lines.append(f"| keywords.txt | ✅ 적용 {int((df['history'] != '삭제').sum())}개 |")
-    else:
-        lines.append("| keywords.txt | ❌ 파일 없음 |")
-    s = load_settings()
-    effort = getattr(s, "reasoning_effort", "-")
-    lines.append(f"| LLM | {s.provider} · {s.model or '(모델 미설정)'} · effort {effort} |")
-    return "| 항목 | 상태 |\n|---|---|\n" + "\n".join(lines)
-
-
 def progress_view():
     done, total = STATE.counts["done"], max(STATE.total, 1)
     pct = int(done / total * 100)
@@ -170,8 +178,8 @@ def progress_view():
            f'<div style="margin-top:6px;color:#6b7280;font-size:13px">{status} · {done} / {STATE.total} 테이블 · '
            f'경과 {app.format_elapsed(elapsed)} · 남은 예상 {app.format_elapsed(remain)}</div>')
     c = STATE.counts
-    stats = (f"**민감** {c['sensitive']}  ·  **비민감** {c['non-sensitive']}  ·  "
-             f"**검토 필요** {c['needs_review']}  ·  **error** {c['error']}")
+    stats = (f"민감 **{c['sensitive']}**  ·  비민감 **{c['non-sensitive']}**  ·  "
+             f"검토 필요 **{c['needs_review']}**  ·  에러 발생 **{c['error']}**")
     return bar, stats, "\n".join(STATE.logs)
 
 
@@ -179,40 +187,65 @@ def load_result(path) -> pd.DataFrame:
     return pd.read_excel(path, dtype=str).fillna("") if path else pd.DataFrame(columns=PREVIEW_COLUMNS)
 
 
-def filter_result(full: pd.DataFrame, decision: str, review_only: bool) -> pd.DataFrame:
+REVIEW_FILTERS = ["전체", "검토 필요", "검토 불필요"]
+
+
+def filter_result(full: pd.DataFrame, decision: str, review: str) -> pd.DataFrame:
     df = full
     if decision != "전체":
         df = df[df["decision"] == decision]
-    if review_only:
+    if review == "검토 필요":
         df = df[df["needs_review"] == "True"]
+    elif review == "검토 불필요":
+        df = df[df["needs_review"] != "True"]
     return df[PREVIEW_COLUMNS] if len(df.columns) else df
 
 
-def run_pipeline(workers: int):
+def file_size_label(path) -> str:
+    """파일 크기를 '6.0 KB' 같은 읽기 쉬운 형태로 바꾼다."""
+    size = path.stat().st_size
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def download_view(path):
+    """결과 파일 영역: 파일명 안내 + '다운로드 (용량)' 버튼."""
+    if not path:
+        return "결과 파일이 아직 없습니다. 실행이 끝나면 여기서 내려받을 수 있습니다.", gr.DownloadButton(visible=False)
+    return (f"**{path.name}**",
+            gr.DownloadButton(f"⬇ 다운로드 ({file_size_label(path)})", value=str(path), visible=True))
+
+
+def run_pipeline(schema: str, model: str, effort: str):
     try:
-        STATE.result_path = app.run(workers=int(workers), on_result=STATE.add, stop_event=STATE.stop_event)
+        STATE.result_path = app.run(schema=schema, model=model, reasoning_effort=effort,
+                                    on_result=STATE.add, stop_event=STATE.stop_event)
     except Exception:
         logging.exception("실행 실패")
     finally:
         STATE.running = False
 
 
-def start_run(workers):
+def start_run(schema, model, effort):
     """실행 버튼: 백그라운드에서 파이프라인을 돌리고, 1초마다 화면을 갱신한다."""
     if STATE.running:
         raise gr.Error("이미 실행 중입니다.")
-    if not (app.TABLES_FILE.exists() and KEYWORDS_FILE.exists()):
-        raise gr.Error("data/ 폴더의 입력 파일을 확인해 주세요.")
-    STATE.reset(total=len(load_tables(app.TABLES_FILE)))
-    worker = threading.Thread(target=run_pipeline, args=(workers,), daemon=True)
+    table_path = app.tables_file(schema)
+    if not table_path.exists():
+        raise gr.Error(f"data/{table_path.name} 파일이 없습니다. 스키마 선택과 파일 이름을 확인해 주세요.")
+    if not KEYWORDS_FILE.exists():
+        raise gr.Error("data/keywords.txt 파일이 없습니다.")
+    STATE.reset(total=len(load_tables(table_path)))
+    worker = threading.Thread(target=run_pipeline, args=(schema, model, effort), daemon=True)
     worker.start()
     while worker.is_alive():
-        yield *progress_view(), gr.update(), gr.update(), gr.update()
+        yield *progress_view(), gr.update(), gr.update(), gr.update(), gr.update()
         time.sleep(1)
 
     full = load_result(STATE.result_path)
-    result_file = str(STATE.result_path) if STATE.result_path else None   # gr.File은 문자열 경로를 받는다
-    yield *progress_view(), full, filter_result(full, "전체", False), result_file
+    yield *progress_view(), full, filter_result(full, "전체", "전체"), *download_view(STATE.result_path)
 
 
 def stop_run():
@@ -239,63 +272,80 @@ def show_detail(full: pd.DataFrame, shown: pd.DataFrame, evt: gr.SelectData) -> 
 def build() -> gr.Blocks:
     with gr.Blocks(title="민감 테이블 식별 PoC") as demo:
         gr.Markdown("## Data Lake 민감 테이블 식별 PoC")
+        with gr.Tabs() as tabs:
 
-        # ── ① 키워드 관리 ──
-        with gr.Tab("① 키워드 관리"):
-            kw_count = gr.Markdown(keyword_counts(load_keywords_df()))
-            kw_table = gr.Dataframe(value=load_keywords_df(), interactive=True, wrap=True,
-                                    row_count=(1, "dynamic"), label="keywords.txt (셀을 눌러 편집 · 맨 아래에서 행 추가)")
-            with gr.Row():
-                kw_reload = gr.Button("↺ 변경 취소 (파일 다시 읽기)")
-                kw_save = gr.Button("💾 저장", variant="primary")
-            gr.Markdown("저장 전 확인: 빈 sys_cd·keyword, 같은 sys_cd 안의 중복 키워드는 저장을 막고, "
-                        "equivalent_terms의 '/'·',' 구분자는 경고합니다. 저장 시 이전 파일은 data/backup/에 보관됩니다.")
-            kw_save.click(save_keywords, kw_table, [kw_table, kw_count])
-            kw_reload.click(reload_keywords, None, [kw_table, kw_count])
+            # ── ① 키워드 관리 ──
+            with gr.Tab("① 키워드 관리", id="keyword"):
+                kw_count = gr.Markdown(keyword_counts(load_keywords_df()))
+                kw_table = gr.Dataframe(value=load_keywords_df(), interactive=True, wrap=True,
+                                        label="keywords.txt (셀을 눌러 편집)")
+                with gr.Row():
+                    kw_add = gr.Button("＋ 행 추가")
+                    kw_reload = gr.Button("↺ 변경 취소 (파일 다시 읽기)")
+                    kw_save = gr.Button("💾 저장", variant="primary")
+                    kw_next = gr.Button("다음 ▶")
+                gr.Markdown("저장 전 확인: 빈 sys_cd·keyword, 같은 sys_cd 안의 중복 키워드는 저장을 막고, "
+                            "equivalent_terms의 '/'·',' 구분자는 경고합니다. "
+                            "변경된 내용이 있을 때만 저장하며, 이전 파일은 data/backup/에 보관됩니다.")
+                kw_add.click(add_keyword_row, kw_table, kw_table)
+                kw_save.click(save_keywords, kw_table, [kw_table, kw_count])
+                kw_reload.click(reload_keywords, None, [kw_table, kw_count])
+                kw_next.click(lambda: gr.Tabs(selected="prompt"), None, tabs)
 
-        # ── ② 프롬프트 편집 ──
-        with gr.Tab("② 프롬프트 편집"):
-            with gr.Row():
-                for key, label in [("system", "판정 프롬프트 · system_prompt.md"),
-                                   ("tag", "고위험 태그 프롬프트 · tag_prompt.md")]:
-                    with gr.Column():
-                        box = gr.Textbox(value=read_prompt(key), label=label, lines=28, max_lines=28)
-                        status = gr.Markdown("")
+            # ── ② 프롬프트 편집 ──
+            with gr.Tab("② 프롬프트 편집", id="prompt"):
+                with gr.Row():
+                    system_box = gr.Textbox(value=read_prompt("system"), lines=28, max_lines=28,
+                                            label="판정 프롬프트 · system_prompt.md")
+                    tag_box = gr.Textbox(value=read_prompt("tag"), lines=28, max_lines=28,
+                                         label="고위험 태그 프롬프트 · tag_prompt.md")
+                with gr.Row():
+                    pr_reload = gr.Button("↺ 원본으로 되돌리기")
+                    pr_save = gr.Button("💾 저장", variant="primary")
+                    pr_next = gr.Button("다음 ▶")
+                pr_status = gr.Markdown("user_prompt.md는 코드가 테이블마다 값을 채우는 틀이라 편집 대상에서 제외했습니다. "
+                                        "변경된 파일만 저장하며, 이전 버전은 prompts/backup/에 보관됩니다.")
+                pr_save.click(save_prompts, [system_box, tag_box], pr_status)
+                pr_reload.click(reload_prompts, None, [system_box, tag_box])
+                pr_next.click(lambda: gr.Tabs(selected="run"), None, tabs)
+
+            # ── ③ 실행 · 결과 ──
+            with gr.Tab("③ 실행 · 결과", id="run"):
+                full_result = gr.State(pd.DataFrame())
+                with gr.Row():
+                    # 좌측: 실행 설정 · 실행 버튼 · 진행 막대 · 실행 로그
+                    with gr.Column(scale=1):
+                        with gr.Group():
+                            schema = gr.Dropdown(app.SCHEMAS, value=app.SCHEMAS[0], label="스키마명")
+                            model = gr.Dropdown(MODELS, value=MODELS[0], label="LLM 모델")
+                            effort = gr.Dropdown(REASONING_EFFORTS, value=DEFAULT_EFFORT, label="추론 정도 (reasoning_effort)")
+                        run_btn = gr.Button("▶ 실행", variant="primary", size="lg")
+                        stop_btn = gr.Button("■ 중지")
+                        bar = gr.HTML(progress_view()[0])
+                        log_box = gr.Textbox(label="실행 로그", lines=16, max_lines=16, autoscroll=True)
+
+                    # 우측: 결과 미리보기 → 건수 → 필터 → 표 → 상세 → 결과 파일
+                    with gr.Column(scale=3):
+                        gr.Markdown("### 결과 미리보기")
+                        stats = gr.Markdown(progress_view()[1])
                         with gr.Row():
-                            revert = gr.Button("↺ 원본으로 되돌리기")
-                            save = gr.Button("💾 저장", variant="primary")
-                        save.click(lambda text, k=key: save_prompt(k, text), box, status)
-                        revert.click(lambda k=key: read_prompt(k), None, box)
-            gr.Markdown("user_prompt.md는 코드가 테이블마다 값을 채우는 틀이라 편집 대상에서 제외했습니다. "
-                        "저장 시 이전 버전은 prompts/backup/에 보관됩니다.")
+                            decision_filter = gr.Dropdown(["전체", "sensitive", "non-sensitive", "error"],
+                                                          value="전체", label="decision")
+                            review_filter = gr.Dropdown(REVIEW_FILTERS, value="전체", label="검토 필요 여부")
+                        preview = gr.Dataframe(value=pd.DataFrame(columns=PREVIEW_COLUMNS), interactive=False, wrap=True,
+                                               label="행을 누르면 아래에 상세가 표시됩니다")
+                        detail = gr.Markdown()
+                        with gr.Group():
+                            gr.Markdown("#### 결과 파일 (xlsx)")
+                            file_name = gr.Markdown(download_view(None)[0])
+                            download_btn = gr.DownloadButton(visible=False, variant="primary")
 
-        # ── ③ 실행 · 결과 ──
-        with gr.Tab("③ 실행 · 결과") as run_tab:
-            full_result = gr.State(pd.DataFrame())
-            with gr.Row():
-                with gr.Column(scale=1):
-                    ready = gr.Markdown(readiness())
-                    workers = gr.Slider(1, 16, value=app.WORKERS, step=1, label="동시 처리 테이블 수 (WORKERS)")
-                    run_btn = gr.Button("▶ 실행", variant="primary", size="lg")
-                    stop_btn = gr.Button("■ 중지")
-                    result_file = gr.File(label="결과 파일 (xlsx)", interactive=False)
-                with gr.Column(scale=3):
-                    bar = gr.HTML(progress_view()[0])
-                    stats = gr.Markdown(progress_view()[1])
-                    log_box = gr.Textbox(label="실행 로그", lines=10, max_lines=10, autoscroll=True)
-                    with gr.Row():
-                        decision_filter = gr.Dropdown(["전체", "sensitive", "non-sensitive", "error"],
-                                                      value="전체", label="decision")
-                        review_only = gr.Checkbox(label="검토 필요만 보기")
-                    preview = gr.Dataframe(label="결과 미리보기 (행을 누르면 상세)", interactive=False, wrap=True)
-                    detail = gr.Markdown()
-
-            run_tab.select(readiness, None, ready)
-            run_btn.click(start_run, workers, [bar, stats, log_box, full_result, preview, result_file])
-            stop_btn.click(stop_run)
-            for ctl in (decision_filter, review_only):
-                ctl.change(filter_result, [full_result, decision_filter, review_only], preview)
-            preview.select(show_detail, [full_result, preview], detail)
+                run_btn.click(start_run, [schema, model, effort],
+                              [bar, stats, log_box, full_result, preview, file_name, download_btn])
+                stop_btn.click(stop_run)
+                for ctl in (decision_filter, review_filter):
+                    ctl.change(filter_result, [full_result, decision_filter, review_filter], preview)
+                preview.select(show_detail, [full_result, preview], detail)
     return demo
 
 

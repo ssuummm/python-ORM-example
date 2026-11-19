@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from itertools import chain
 
 from pydantic import BaseModel, Field, ValidationError
@@ -22,19 +21,9 @@ log = logging.getLogger(__name__)
 
 TAG_PROMPT_FILE = PROMPT_DIR / "tag_prompt.md"
 
-
-def load_tag_prompt() -> tuple[str, list[str]]:
-    """tag_prompt.md를 읽고, '# 고위험 유형' 구역의 "- 유형명: 기준" 줄에서 유형명 목록을 뽑는다.
-
-    유형을 추가·수정할 때는 tag_prompt.md의 '# 고위험 유형' 아래에 "- 유형명: 기준" 한 줄씩 적으면 된다.
-    여기서 뽑은 유형명 목록으로 LLM 응답의 tag 값을 검증한다.
-    """
-    prompt = TAG_PROMPT_FILE.read_text(encoding="utf-8")
-    section = prompt.split("# 고위험 유형", 1)[-1].split("\n# ", 1)[0]   # 다음 '# ' 제목 전까지
-    tag_names = re.findall(r"^- ([^:\n]+?):", section, flags=re.MULTILINE)
-    if not tag_names:
-        raise ValueError(f"{TAG_PROMPT_FILE}에서 고위험 유형('- 유형명: 기준')을 찾지 못함")
-    return prompt, tag_names
+# 고위험 유형은 아래 5개로 고정한다. LLM 응답의 tag가 이 중 하나가 아니면 버린다.
+# (유형을 바꿀 때는 이 목록과 tag_prompt.md의 '고위험 유형 정의'를 함께 고친다.)
+TAG_NAMES = ("재무성과", "영업기밀", "사업계획", "기술노하우", "전략제품")
 
 
 class TagAnswer(BaseModel):
@@ -70,7 +59,7 @@ class HighRiskTagger:
     def __init__(self, client: LLMClient, settings: Settings):
         self.client = client
         self.s = settings
-        self.system_prompt, self.tag_names = load_tag_prompt()
+        self.system_prompt = TAG_PROMPT_FILE.read_text(encoding="utf-8")
 
     def tag(self, table: TableMeta, result: TableResult, kw_index: dict[str, Keyword]) -> list[HighRiskTag]:
         """LLM으로 고위험 유형을 고르고, 정해진 유형명만 남겨 돌려준다. 실패하면 ValueError."""
@@ -89,6 +78,6 @@ class HighRiskTagger:
 
         tags = {}
         for t in answer.high_risk_tags:
-            if t.tag in self.tag_names and t.tag not in tags:   # 정해진 유형명만, 중복은 처음 것만
+            if t.tag in TAG_NAMES and t.tag not in tags:   # 정해진 5개 유형만, 중복은 처음 것만
                 tags[t.tag] = t
         return list(tags.values())

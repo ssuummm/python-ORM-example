@@ -63,6 +63,8 @@ class OpenAICompatibleClient(LLMClient):
         }
         if self.s.json_mode:
             body["response_format"] = {"type": "json_object"}
+        if self.s.reasoning_effort:
+            body["reasoning_effort"] = self.s.reasoning_effort   # UI에서 고른 추론 정도 (low/high/xhigh)
         headers = {"Content-Type": "application/json"}
         if self.s.api_key:
             headers["Authorization"] = f"Bearer {self.s.api_key}"

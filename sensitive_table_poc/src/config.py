@@ -21,6 +21,7 @@ class Settings:
     max_tokens: int = 4096
     timeout_sec: int = 120
     json_mode: bool = True          # OpenAI 호환 response_format=json_object 사용 여부 (게이트웨이 미지원 시 false)
+    reasoning_effort: str = "high"
     max_retries: int = 2            # 파싱/검증 실패 시 재요청 횟수
 
     # --- 입력 구성 ---
