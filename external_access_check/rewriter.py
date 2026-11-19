@@ -28,6 +28,7 @@ from .references import (
 )
 from .substitutor import referenced_physical_tables, substitute
 from .errors import (
+    ColumnPolicyMissingError,
     FullyDeniedError,
     ParseError,
     PolicyMissingError,

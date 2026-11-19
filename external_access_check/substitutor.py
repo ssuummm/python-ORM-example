@@ -66,9 +66,6 @@ def substitute(sql: str, policy: Policy, *, dialect: str = "oracle") -> str:
     _reject_non_select(tree)
     cte_names = _collect_cte_names(tree)
 
-    # 26.11.05 추가 — 정책(all_columns)에 없는 신규 컬럼 참조는 rewrite 전에 거부
-    _check_unregistered_columns(tree, policy, cte_names)
-
     # 단계 0 — pre-walk: 외부 참조된 banned 컬럼을 Table 노드별로 수집
     banned_per_table = _collect_banned_refs(tree, policy, cte_names)
     _merge_banned_refs(
@@ -96,6 +93,7 @@ def substitute(sql: str, policy: Policy, *, dialect: str = "oracle") -> str:
         banned = banned_per_table.get(id(table), set())
         edits.append(_table_replacement_edit(sql, table, tp, banned))
 
+    _check_unregistered_columns(tree, policy, cte_names)
     # 단계 2 — IS NULL 보정 + unresolved fallback
     #
     # 기존 구현은 table 치환 후 AST 를 다시 훑었지만, 그 방식은 최종 tree.sql()
@@ -1277,6 +1275,8 @@ class _UnregisteredColumnChecker:
         # (1) 컬럼이 아닌 것은 건너뛴다
         if col.is_star or isinstance(col.this, exp.Star):
             return
+        if _is_quoted_column(col):
+            return
         if isinstance(col.parent, exp.Partition):          # PARTITION (P2024)
             return
         if col.find_ancestor(exp.MatchRecognize) is not None:  # 패턴 변수 A.COL
@@ -1404,7 +1404,7 @@ class _UnregisteredColumnChecker:
 
         for ident in using:
             name = ident.name
-            if not name:
+            if not name or getattr(ident, "quoted", False):
                 continue
             if self._source_has(name, right_node, right_src) == _NO:
                 self._raise(name, [right_src])
@@ -1417,8 +1417,6 @@ class _UnregisteredColumnChecker:
 
     def _is_not_a_column(self, col: exp.Column, owner: exp.Select) -> bool:
         """의사 컬럼이나 괄호 없는 함수처럼 컬럼이 아닌 이름인가. ("..." 는 항상 컬럼)"""
-        if _is_quoted_column(col):
-            return False
         name = col.name.upper()
         if name in _ALWAYS_PSEUDO_COLUMNS:
             return True
