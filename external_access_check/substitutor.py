@@ -841,18 +841,96 @@ def _classify_original_via_scope_projection(
 ) -> str:
     expr = scope.expression
     if isinstance(expr, (exp.Union, exp.Intersect, exp.Except)):
-        if isinstance(expr.left, exp.Select):
-            return _classify_original_in_select(
-                col_name,
-                expr.left,
-                scope,
-                cte_names,
-                policy,
-            )
-        return _UNRESOLVED
+        return _classify_setop_column(col_name, scope, cte_names, policy)
     if not isinstance(expr, exp.Select):
         return _UNRESOLVED
     return _classify_original_in_select(col_name, expr, scope, cte_names, policy)
+
+
+def _classify_setop_column(
+    col_name: str,
+    scope: Scope,
+    cte_names: Set[str],
+    policy: Policy,
+) -> str:
+    """UNION/INTERSECT/MINUS 결과 컬럼을 branch 별로 판정해 합친다.
+
+    - 컬럼 이름은 맨 왼쪽 branch 가 정하고, 다른 branch 는 같은 위치의 컬럼이 대응한다.
+    - 각 branch 의 projection(s.COL)은 그 branch 자신의 scope 에서 해석한다.
+    - 권한은 branch 마다 이미 적용되므로, 한 branch 라도 실제 값이면 _REAL
+      (볼 수 있는 데이터는 보여 준다). 모든 branch 가 금지일 때만 _NULL_CONST.
+    - 대응 위치를 확정할 수 없는 branch 는 실제 값으로 본다 (데이터를 지우지 않는 쪽).
+    """
+    branches = _setop_branch_scopes(scope)
+    if not branches:
+        return _UNRESOLVED
+    left = branches[0]
+    left_kind = _classify_original_in_select(
+        col_name, left.expression, left, cte_names, policy
+    )
+    if left_kind == _UNRESOLVED:
+        return _UNRESOLVED          # UNION 결과에 그런 이름의 컬럼이 없다
+
+    position = _projection_position(left.expression, col_name)
+    kinds = [left_kind]
+    for branch in branches[1:]:
+        select = branch.expression
+        if position is None:
+            # 왼쪽이 SELECT * 등으로 위치를 알 수 없음 → 같은 이름으로 판정
+            name = col_name
+        elif _has_star_projection(select) or position >= len(select.expressions):
+            kinds.append(_REAL)
+            continue
+        else:
+            name = _projection_name(select.expressions[position])
+            if name is None:        # 'a', NULL, COUNT(*) 처럼 이름 없는 식
+                kinds.append(_REAL)
+                continue
+        kind = _classify_original_in_select(name, select, branch, cte_names, policy)
+        kinds.append(_REAL if kind == _UNRESOLVED else kind)
+
+    if _REAL in kinds:
+        return _REAL
+    return _NULL_CONST
+
+
+def _setop_branch_scopes(scope: Scope) -> List[Scope]:
+    """SetOp scope 의 SELECT branch scope 들을 왼쪽부터 순서대로.
+
+    sqlglot 버전에 따라 branch scope 목록의 이름이 다르다
+    (27.x: union_scopes, 30.x: set_operation_scopes).
+    """
+    if isinstance(scope.expression, exp.Select):
+        return [scope]
+    if not isinstance(scope.expression, (exp.Union, exp.Intersect, exp.Except)):
+        return []
+    children = (
+        getattr(scope, "set_operation_scopes", None)
+        or getattr(scope, "union_scopes", None)
+        or []
+    )
+    out: List[Scope] = []
+    for child in children:
+        out.extend(_setop_branch_scopes(child))
+    return out
+
+
+def _projection_position(select: exp.Select, col_name: str) -> Optional[int]:
+    """SELECT 목록에서 col_name 의 위치. * 가 앞에 있거나 없으면 None."""
+    upper = col_name.upper()
+    for index, proj in enumerate(select.expressions):
+        if isinstance(proj, exp.Star) or (isinstance(proj, exp.Column) and proj.is_star):
+            return None
+        if _projection_name(proj) == upper:
+            return index
+    return None
+
+
+def _has_star_projection(select: exp.Select) -> bool:
+    return any(
+        isinstance(p, exp.Star) or (isinstance(p, exp.Column) and p.is_star)
+        for p in select.expressions
+    )
 
 
 def _classify_original_in_select(
