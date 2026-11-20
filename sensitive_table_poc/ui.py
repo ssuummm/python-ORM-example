@@ -140,6 +140,7 @@ class RunState:
         self.logs = deque(maxlen=300)
         self.started = 0.0
         self.result_path = None
+        self.table_info = {}          # table_id → (테이블 한글명, 원천 테이블명), 상세 패널용
         self.stop_event = threading.Event()
 
     def reset(self, total: int):
@@ -650,7 +651,10 @@ def detail_html(full: pd.DataFrame, table_id: str) -> str:
     conds = "".join(f"<div style='font-family:monospace;background:#fafbfd;border:1px solid #e3e7ef;border-radius:6px;"
                     f"padding:6px 8px;margin:3px 0'>{html.escape(c.strip())}</div>"
                     for c in row["row_conditions"].split(" | ") if c.strip()) or "-"
-    return (f"<h3 style='margin:0'>{html.escape(table_id)}</h3><div class='muted'>{row['sys_cd']}</div>"
+    kor_name, source_table = STATE.table_info.get(table_id, ("", ""))
+    return (f"<h3 style='margin:0'>{html.escape(table_id)}</h3>"
+            f"<div class='muted'>{html.escape(kor_name) or '-'}</div>"
+            f"<div class='muted'>원천: {html.escape(source_table) or '-'}</div>"
             f"<div style='display:grid;grid-template-columns:80px 1fr;gap:6px 10px;margin:12px 0;font-size:13px'>"
             f"<span class='muted'>판정</span><span><span class='badge' style='{DECISION_STYLE.get(label, '')}'>{label}</span></span>"
             f"<span class='muted'>신뢰도</span><span><span style='display:inline-block;width:120px;height:8px;background:#e8ecf3;"
@@ -700,7 +704,9 @@ def start_run(schema, model, effort):
         raise gr.Error(f"data/{table_path.name} 파일이 없습니다. 스키마 선택과 파일 이름을 확인해 주세요.")
     if not KEYWORDS_FILE.exists():
         raise gr.Error("data/keywords.txt 파일이 없습니다.")
-    STATE.reset(total=len(load_tables(table_path)))
+    tables = load_tables(table_path)
+    STATE.reset(total=len(tables))
+    STATE.table_info = {t.table_id: (t.table_kor_name, t.source_table) for t in tables}
     worker = threading.Thread(target=run_pipeline, args=(schema, model, effort), daemon=True)
     worker.start()
     keep = [gr.update()] * 5

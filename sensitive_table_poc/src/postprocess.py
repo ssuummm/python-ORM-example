@@ -17,7 +17,7 @@ from .models import (
     MatchedKeywordInfo, SensitiveFinding, TableMeta, TableResult,
 )
 
-ALLOWED_EVIDENCE = {"table_name", "table_desc", "column_name", "column_desc",
+ALLOWED_EVIDENCE = {"table_name", "table_kor_name", "table_desc", "column_name", "column_desc",
                     "std_term", "std_term_desc", "value", "value_pattern"}
 _SQL_FORBIDDEN = re.compile(r";|--|/\*|\b(DROP|DELETE|UPDATE|INSERT|ALTER|UNION|SELECT|EXEC|GRANT)\b", re.I)
 _SQL_ALLOWED_CHARS = re.compile(r"^[\w\s'(),.=<>!%가-힣\-]+$")

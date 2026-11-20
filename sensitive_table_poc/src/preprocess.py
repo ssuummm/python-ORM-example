@@ -72,6 +72,7 @@ class KeywordMatcher:
                     hits.append(KeywordHit(keyword_id=kw.keyword_id, term=term, target=target, field=field))
 
         add(TABLE_TARGET, "table_name", table.table_name, True)
+        add(TABLE_TARGET, "table_kor_name", table.table_kor_name, False)
         add(TABLE_TARGET, "table_desc", table.table_desc, False)
         for c in table.columns:
             add(c.column_name, "column_name", c.column_name, True)
@@ -125,13 +126,16 @@ def build_table_payload(table: TableMeta) -> dict:
             col["value_source"] = c.sample_source
         columns.append(col)
 
-    return {
+    payload = {
         "table_id": table.table_id,
         "sys_cd": table.sys_cd,
         "table_name": table.table_name,
+        "table_kor_name": table.table_kor_name,
+        "source_table": table.source_table,
         "table_desc": table.table_desc,
         "columns": columns,
     }
+    return {k: v for k, v in payload.items() if v != ""}   # 비어 있는 테이블 항목은 뺀다
 
 
 # ---------------------------------------------------------------------------

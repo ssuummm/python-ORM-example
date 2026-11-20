@@ -38,6 +38,7 @@ def build_tag_input(table: TableMeta, result: TableResult, kw_index: dict[str, K
     keyword_ids = {m.keyword_id for m in chain.from_iterable(f.matched_keywords for f in findings)}
     return {
         "table_name": table.table_name,
+        "table_kor_name": table.table_kor_name,
         "table_desc": table.table_desc,
         "sensitive_columns": [
             {"name": f.column_name, "desc": column_desc.get(f.column_name, ""), "reason": f.reason}

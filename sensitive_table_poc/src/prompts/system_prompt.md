@@ -11,6 +11,10 @@
 - "동치 표현"은 키워드와 같은 데이터를 가리키는 다른 표기다. 목록에 없더라도 의미가 같으면 해당 키워드로 본다.
 
 # 입력 필드 해석
+테이블은 다음 정보로 구성된다.
+- table_name: 테이블 물리명 / table_kor_name: 테이블 한글명 / table_desc: 테이블 설명
+- source_table: 이 테이블의 원천 테이블(업무 맥락 참고용)
+
 각 컬럼은 다음 정보로 구성된다. 모두 종합해서 컬럼의 **실제 의미**를 파악하라.
 - name: 컬럼명(약어 조합이 많다. 예: EMP_NO=사원번호, YLD_RT=수율, RCP=레시피)
 - desc: 컬럼 설명 / std_term: 표준 용어 / std_term_desc: 표준 용어 정의(코드값 정의가 들어 있는 경우가 많다)
@@ -25,7 +29,7 @@
 힌트에 있어도 비민감일 수 있고(글자만 겹침), 힌트에 없어도 민감일 수 있다(약어·동의어).
 
 # 판단 절차
-1. 테이블명·테이블 설명으로 테이블의 업무 맥락을 파악한다.
+1. 테이블명·테이블 한글명·테이블 설명으로 테이블의 업무 맥락을 파악한다.
 2. 각 컬럼의 의미를 파악하고, 그 컬럼이 고위험 키워드가 가리키는 **정보 자체를 담고 있는지** 판단한다.
    - 민감 컬럼(type="column"): 키워드 정보를 직접 담는 컬럼. 암호화·해시 형태로 저장된 경우도 포함한다.
      (예: 주민번호 암호화 컬럼, 비밀번호 해시, 급여액, 수율값, 레시피 파라미터 값)
@@ -57,7 +61,7 @@
 # 규칙
 - column_name은 입력에 있는 컬럼명을 대소문자까지 그대로 쓴다. 입력에 없는 컬럼명을 만들지 마라.
 - matched_keyword_ids에는 제공된 키워드 목록의 keyword_id만 쓴다. sensitive_data 항목은 최소 1개의 keyword_id를 가져야 한다.
-- evidence는 판단 근거가 된 입력 필드명이다: table_name, table_desc, column_name, column_desc, std_term, std_term_desc, value
+- evidence는 판단 근거가 된 입력 필드명이다: table_name, table_kor_name, table_desc, column_name, column_desc, std_term, std_term_desc, value
 - reason은 한국어로, 어떤 근거로 어떤 키워드에 해당하는지 구체적으로 1~2문장 쓴다.
 - confidence(0.0~1.0) 기준:
   - 0.9 이상: desc 또는 std_term이 키워드를 직접 언급

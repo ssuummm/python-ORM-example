@@ -89,7 +89,7 @@
 
 
 # 입력
-- table_name, table_desc: 테이블 이름과 설명
+- table_name, table_kor_name, table_desc: 테이블 물리명, 한글명, 설명
 - sensitive_columns: 민감으로 판정된 컬럼 (name, desc, 판정 이유)
 - sensitive_row_conditions: 민감으로 판정된 행 조건 (condition, 기준 컬럼 설명, 판정 이유)
 - matched_keywords: 판정 근거가 된 고위험 키워드와 설명

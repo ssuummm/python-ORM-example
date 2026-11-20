@@ -4,11 +4,33 @@
 
 - 키워드 파일(keywords.txt) 열: sys_cd, keyword, description, equivalent_terms, high_risk_tag,
                               source, source_detail, history
-- 크롤링 결과 파일 열: table_name, table_desc, sys_cd, schema, column_name, column_desc,
-                      equivalent_columns, std_term, std_term_desc, data_type
+- 크롤링 결과 파일 열(한글): 시스템코드, 스키마, 테이블명(물리), 테이블한글명, 원천테이블, 설명, 컬럼, 컬럼설명,
+                      동치컬럼, 표준용어, 표준용어내용, 데이터타입, 샘플값, 샘플산출방법
+  (테이블명, 추가설명, 속성 열은 쓰지 않는다)
 """
+from pathlib import Path
+
 import pandas as pd
 from .models import ColumnMeta, Keyword, TableMeta
+
+# 크롤링 결과 파일의 한글 열 이름 → 코드에서 쓰는 이름 (열 이름의 공백은 무시하고 비교)
+CRAWL_COLUMNS = {
+    "시스템코드": "sys_cd",
+    "스키마": "schema_name",
+    "테이블명(물리)": "table_name",
+    "테이블한글명": "table_kor_name",
+    "원천테이블": "source_table",
+    "설명": "table_desc",
+    "컬럼": "column_name",
+    "컬럼설명": "column_desc",
+    "동치컬럼": "equivalent_columns",
+    "표준용어": "std_term",
+    "표준용어내용": "std_term_desc",
+    "데이터타입": "data_type",
+    "샘플값": "sample_values",
+    "샘플산출방법": "sample_source",
+}
+REQUIRED_COLUMNS = ["sys_cd", "schema_name", "table_name", "column_name"]   # 없으면 실행할 수 없는 열
 
 def read_txt(path: str) -> pd.DataFrame:
     """탭으로 구분된 txt 파일을 DataFrame으로 읽는다."""
@@ -57,6 +79,14 @@ def load_keywords(path: str) -> list[Keyword]:
 def load_tables(path: str) -> list[TableMeta]:
     """크롤링 결과 파일을 읽는다. 파일은 컬럼 1개당 1행이므로 테이블 단위로 묶는다."""
     df = read_txt(path)
+    df = df.rename(columns=lambda c: CRAWL_COLUMNS.get(c.replace(" ", ""), c))   # 한글 열 이름 → 영문
+    korean = {v: k for k, v in CRAWL_COLUMNS.items()}                          # 오류 메시지용
+    missing = [korean[c] for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"{Path(path).name}에 필요한 열이 없습니다: {', '.join(missing)}")
+    for col in CRAWL_COLUMNS.values():           # 선택 열이 없으면 빈 값으로 채운다
+        if col not in df.columns:
+            df[col] = ""
     tables = {}  # key: "스키마.테이블명", value: TableMeta
 
     for row in df.to_dict("records"):
@@ -69,6 +99,8 @@ def load_tables(path: str) -> list[TableMeta]:
                 sys_cd=row["sys_cd"],
                 schema_name=row["schema_name"],
                 table_name=row["table_name"],
+                table_kor_name=row["table_kor_name"],
+                source_table=row["source_table"],
                 table_desc=row["table_desc"],
             )
 

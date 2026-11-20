@@ -45,6 +45,8 @@ class TableMeta(BaseModel):
     sys_cd: str
     schema_name: str = ""
     table_name: str
+    table_kor_name: str = ""       # 테이블한글명
+    source_table: str = ""         # 원천테이블
     table_desc: str = ""
     columns: list[ColumnMeta] = Field(default_factory=list)
 
@@ -58,7 +60,7 @@ class KeywordHit(BaseModel):
     keyword_id: str
     term: str
     target: str   # TABLE_TARGET 또는 컬럼명
-    field: str    # table_name | table_desc | column_name | column_desc | std_term | std_term_desc | value
+    field: str    # table_name | table_kor_name | table_desc | column_name | column_desc | std_term | std_term_desc | value
 
 
 # =========================================================
