@@ -77,18 +77,22 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 .outline label.selected span{color:#4338ca!important}
 /* 세그먼트 버튼 (편집/변경 비교, 추론 정도) */
 .seg .wrap{display:inline-flex!important;gap:0!important;border:1px solid #dfe3ea;border-radius:8px;overflow:hidden;background:#fff;flex-wrap:nowrap!important}
-.seg label{border:none!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;margin:0!important;padding:6px 10px!important;
+.seg label{border:none!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;margin:0!important;padding:3px 10px!important;min-height:0!important;
   border-right:1px solid #dfe3ea!important;color:#5b6577}
 .seg label:last-child{border-right:none!important}
 .seg label input{display:none!important}
 .seg label.selected{background:#eef0ff!important;color:#4338ca!important;font-weight:700}
 .seg label.selected span{color:#4338ca!important}
 /* 칩 버튼 (시스템, 스키마) */
-.chips .wrap{gap:6px!important}
-.chips label{border:1px solid #dfe3ea!important;border-radius:999px!important;box-shadow:none!important;background:#fff!important;padding:5px 12px!important;color:#5b6577}
+.chips .wrap{gap:5px!important}
+.chips label{border:1px solid #dfe3ea!important;border-radius:999px!important;box-shadow:none!important;background:#fff!important;padding:2px 10px!important;min-height:0!important;color:#5b6577}
 .chips label input{display:none!important}
 .chips label.selected{background:#4f46e5!important;border-color:#4f46e5!important}
 .chips label.selected span{color:#fff!important;font-weight:700}
+/* 칩·세그먼트 버튼 글자: 본문보다 한 단계 작게 */
+.chips label span, .seg label span{font-size:12.5px!important;line-height:1.5!important}
+.chips label, .seg label{gap:0!important;justify-content:center}
+.chips label span, .seg label span{margin:0!important;padding:0!important}
 
 button.secondary{border:1px solid #dfe3ea!important;background:#fff!important}
 button.secondary:hover{background:#f3f5fa!important}
