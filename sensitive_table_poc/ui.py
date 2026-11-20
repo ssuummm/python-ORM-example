@@ -36,9 +36,25 @@ TAG_COLORS = {"재무성과": "#d8434b", "영업기밀": "#e98b3a", "사업계�
 CSS = """
 .gradio-container{max-width:1440px!important}
 /* 상단 탭 = 진행 단계 */
-#steps > .tab-wrapper button[role=tab]{border-radius:20px;padding:6px 16px;margin-right:6px;background:#eef0f3;font-weight:600}
-#steps > .tab-wrapper button[role=tab][aria-selected=true]{background:#2f5bea;color:#fff}
-#steps > .tab-wrapper button[role=tab][aria-selected=true]::after{display:none}
+/* 상단 단계 표시: 화면 너비를 3등분한 STEP 1 → 2 → 3 */
+#steps > .tab-wrapper{border-bottom:none!important;height:auto!important;margin:4px 0 18px;padding:0}
+#steps > .tab-wrapper > [role=tablist]{display:flex;gap:14px;width:100%;height:auto}
+#steps [role=tab]{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto!important;
+  padding:10px 4px 0!important;margin:0!important;border:none!important;border-top:3px solid #dfe3ea!important;
+  border-radius:0!important;background:transparent!important;color:#8a93a5!important;font-size:15px;font-weight:700;text-align:left}
+#steps [role=tab]::before{font-size:11px;font-weight:700;letter-spacing:.06em;color:#a3abb9}
+#steps [role=tab]::after{content:"";position:static!important;display:block!important;width:auto!important;height:auto!important;
+  background:none!important;font-size:12px;font-weight:400;color:#a3abb9}
+#steps [role=tab][data-tab-id=keyword]::before{content:"STEP 1"}
+#steps [role=tab][data-tab-id=prompt]::before{content:"STEP 2"}
+#steps [role=tab][data-tab-id=run]::before{content:"STEP 3"}
+#steps [role=tab][data-tab-id=keyword]::after{content:"판정에 쓸 고위험 키워드 확인 · 수정"}
+#steps [role=tab][data-tab-id=prompt]::after{content:"LLM 판정 기준 문구 조정 (필요할 때만)"}
+#steps [role=tab][data-tab-id=run]::after{content:"스키마를 골라 실행하고 결과 확인"}
+#steps [role=tab]:hover{color:#4b5565!important;border-top-color:#c3c9d6!important}
+#steps [role=tab][aria-selected=true]{color:#1b2333!important;border-top-color:#4f46e5!important}
+#steps [role=tab][aria-selected=true]::before{color:#4f46e5}
+#steps [role=tab][aria-selected=true]::after{color:#5b6577}
 /* 요약 카드 */
 .cards{display:flex;gap:12px}
 .card{flex:1;background:#fff;border:1px solid #e3e7ef;border-radius:10px;padding:12px 14px}
@@ -58,8 +74,6 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
 /* 공통 정리 */
 .apptitle{font-size:20px;font-weight:800;color:#1b2333;padding:4px 0 2px}
-.apptitle span{font-size:12px;font-weight:600;color:#6b7486;background:#eef0f4;border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:middle}
-#steps > .tab-wrapper{border-bottom:none;margin-bottom:6px}
 /* 프롬프트 목차: 박스 없이 왼쪽 선 하나로 된 목록 */
 .outline{background:transparent!important;border:none!important;padding:4px 0!important}
 .outline .wrap{flex-direction:column!important;gap:0!important}
@@ -680,8 +694,8 @@ def file_size_label(path) -> str:
 
 def download_button(path):
     if not path:
-        return gr.DownloadButton("⬇ 다운로드 (결과 없음)", value=None, interactive=False)
-    return gr.DownloadButton(f"⬇ 다운로드 ({file_size_label(path)})", value=str(path), interactive=True)
+        return gr.DownloadButton("⬇ 다운로드 (결과 없음)", value=None, interactive=False, size="sm", scale=0, min_width=170)
+    return gr.DownloadButton(f"⬇ 다운로드 ({file_size_label(path)})", value=str(path), interactive=True, size="sm")
 
 
 def run_pipeline(schema: str, model: str, effort: str):
@@ -742,18 +756,18 @@ def on_select(full, shown, evt: gr.SelectData):
 # =====================================================================
 def build() -> gr.Blocks:
     with gr.Blocks(title="민감 테이블 식별 PoC") as demo:
-        gr.HTML("<div class='apptitle'>Data Lake 민감 테이블 식별 <span>PoC</span></div>")
-        with gr.Tabs(elem_id="steps") as tabs:
+        gr.HTML("<div class='apptitle'>Data Lake 민감 테이블 식별</div>")
+        with gr.Tabs(elem_id="steps", selected="run") as tabs:   # 앱을 열면 STEP 3(실행 · 결과)부터
 
             # ── 1 키워드 관리 ──
-            with gr.Tab("1  키워드 관리", id="keyword"):
+            with gr.Tab("키워드 관리", id="keyword"):
                 first = read_keywords()
                 kw_full, kw_orig = gr.State(first), gr.State(first)
                 c0, b0, m0 = kw_summary(first, first)
                 kw_cards = gr.HTML(c0)
-                with gr.Row(equal_height=True):
+                with gr.Row():
                     kw_query = gr.Textbox(placeholder="🔍 키워드 · 설명 · 유사어 검색", show_label=False, scale=2, container=False)
-                    kw_addbtn = gr.Button("＋ 행 추가", scale=0, min_width=110)
+                    kw_addbtn = gr.Button("＋ 행 추가", size="sm", scale=0, min_width=90)
                 kw_sys = gr.Radio(sys_choices(first), value="전체", label="시스템 (sys_cd)", elem_classes="chips")
                 kw_msg = gr.Markdown(m0)
                 kw_table = gr.Dataframe(value=kw_view(first, first, "전체", ""), interactive=True, wrap=True,
@@ -762,9 +776,9 @@ def build() -> gr.Blocks:
                                         label="셀을 눌러 편집 · 초록 = 신규, 노랑 = 수정, 회색 = history '삭제', 빨강 = 저장 전에 고칠 칸")
                 with gr.Row(elem_classes="actionbar"):
                     kw_bar = gr.HTML(b0)
-                    kw_revert_btn = gr.Button("↺ 원본으로 되돌리기", scale=0, min_width=210)
-                    kw_save_btn = gr.Button("💾 저장", scale=0, min_width=100)
-                    kw_next_btn = gr.Button("다음: 프롬프트 편집 →", variant="primary", scale=0, min_width=190)
+                    kw_revert_btn = gr.Button("↺ 원본으로 되돌리기", size="sm", scale=0, min_width=150)
+                    kw_save_btn = gr.Button("💾 저장", size="sm", scale=0, min_width=80)
+                    kw_next_btn = gr.Button("다음: 프롬프트 편집 →", variant="primary", size="sm", scale=0, min_width=160)
 
                 outs = [kw_full, kw_table, kw_cards, kw_bar, kw_msg, kw_sys]
                 kw_table.input(kw_on_edit, [kw_table, kw_full, kw_orig, kw_sys, kw_query], outs, trigger_mode="always_last")
@@ -777,7 +791,7 @@ def build() -> gr.Blocks:
                 kw_next_btn.click(kw_next, [kw_full, kw_orig], tabs)
 
             # ── 2 프롬프트 편집 ──
-            with gr.Tab("2  프롬프트 편집", id="prompt"):
+            with gr.Tab("프롬프트 편집", id="prompt"):
                 sys_text, tag_text = gr.State(read_prompt("system")), gr.State(read_prompt("tag"))
                 with gr.Tabs():
                     with gr.Tab(PROMPT_TITLES["system"]):
@@ -789,13 +803,13 @@ def build() -> gr.Blocks:
                         t_table = gr.Dropdown(table_choices(), label="테이블", scale=2)
                         t_model = gr.Dropdown(MODELS, value=MODELS[0], label="LLM 모델", scale=1)
                         t_effort = gr.Radio(REASONING_EFFORTS, value=DEFAULT_EFFORT, label="추론 정도", scale=1, elem_classes="seg")
-                        t_btn = gr.Button("▶ 1건 실행", scale=0, min_width=120)
+                        t_btn = gr.Button("▶ 1건 실행", size="sm", scale=0, min_width=100)
                     t_out = gr.Markdown()
                 with gr.Row(elem_classes="actionbar"):
                     pr_bar = gr.HTML(prompt_bar(read_prompt("system"), read_prompt("tag")))
-                    pr_revert = gr.Button("↺ 원본으로 되돌리기", scale=0, min_width=210)
-                    pr_save = gr.Button("💾 저장", scale=0, min_width=100)
-                    pr_next = gr.Button("다음: 실행 · 결과 →", variant="primary", scale=0, min_width=180)
+                    pr_revert = gr.Button("↺ 원본으로 되돌리기", size="sm", scale=0, min_width=150)
+                    pr_save = gr.Button("💾 저장", size="sm", scale=0, min_width=80)
+                    pr_next = gr.Button("다음: 실행 · 결과 →", variant="primary", size="sm", scale=0, min_width=150)
 
                 def current(s, t, e1, o1, m1, e2, o2, m2):
                     """편집 칸에 방금 입력한 내용까지 반영한 두 프롬프트 전문."""
@@ -831,7 +845,7 @@ def build() -> gr.Blocks:
                 pr_next.click(current, cur_in, [sys_text, tag_text]).then(to_run, [sys_text, tag_text], tabs)
 
             # ── 3 실행 · 결과 ──
-            with gr.Tab("3  실행 · 결과", id="run") as run_tab:
+            with gr.Tab("실행 · 결과", id="run") as run_tab:
                 full_result, active = gr.State(pd.DataFrame()), gr.State(None)
                 with gr.Row():
                     # 좌측: 실행 설정 → 실행 → 진행 단계 → 로그
@@ -844,8 +858,8 @@ def build() -> gr.Blocks:
                             model = gr.Dropdown(MODELS, value=MODELS[0], label="LLM 모델")
                             effort = gr.Radio(REASONING_EFFORTS, value=DEFAULT_EFFORT, label="추론 정도 (reasoning_effort)", elem_classes="seg")
                         with gr.Row():
-                            run_btn = gr.Button("▶ 실행", variant="primary", size="lg", scale=3)
-                            stop_btn = gr.Button("■ 중지", size="lg", scale=1)
+                            run_btn = gr.Button("▶ 실행", variant="primary", size="md", scale=3, min_width=120)
+                            stop_btn = gr.Button("■ 중지", size="md", scale=1, min_width=70)
                         stage = gr.HTML(stage_html())
                         with gr.Accordion("실행 로그", open=True):
                             log_box = gr.Textbox(show_label=False, lines=14, max_lines=14, autoscroll=True, elem_id="log")
@@ -865,7 +879,7 @@ def build() -> gr.Blocks:
 
                     # 오른쪽: 상세 (행을 누르면 열림)
                     with gr.Column(scale=1, min_width=300, visible=False) as detail_col:
-                        close_btn = gr.Button("✕ 닫기", size="sm")
+                        close_btn = gr.Button("✕ 닫기", size="sm", scale=0, min_width=70)
                         detail = gr.HTML()
 
                 schema.change(schema_info, schema, schema_note)
