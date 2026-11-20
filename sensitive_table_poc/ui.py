@@ -30,8 +30,14 @@ DEFAULT_EFFORT = "high"
 TAG_COLORS = {"재무성과": "#d8434b", "영업기밀": "#e98b3a", "사업계획": "#2f5bea",
               "기술노하우": "#7a5af0", "전략제품": "#1f9d6b"}
 
+# 화면 전체에서 쓰는 글꼴 하나 (표·로그·편집기 포함). 앞에서부터 설치된 글꼴을 쓴다.
+FONTS = ["Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", "sans-serif"]
+FONT_CSS = ", ".join(f'"{f}"' if " " in f else f for f in FONTS)
+
 CSS = """
 .gradio-container{max-width:1440px!important}
+/* 글꼴 통일: Gradio 기본 글꼴(IBM Plex 등)·고정폭 글꼴 대신 FONTS 하나만 쓴다 */
+.gradio-container, .gradio-container *:not(svg):not(path), .cm-editor, .cm-content{font-family:__FONT__!important}
 /* 상단 탭 = 진행 단계 */
 /* 상단 단계 표시: 화면 너비를 3등분한 STEP 1 → 2 → 3 */
 #steps > .tab-wrapper{border-bottom:none!important;height:auto!important;margin:4px 0 18px;padding:0}
@@ -96,7 +102,7 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 
 button.secondary{border:1px solid #dfe3ea!important;background:#fff!important}
 button.secondary:hover{background:#f3f5fa!important}
-[role=gridcell], [role=gridcell] *, th, th *{font-family:"Noto Sans KR","Malgun Gothic",sans-serif!important;font-size:13px}
+[role=gridcell], [role=gridcell] *, th, th *{font-size:13px!important}
 th{background:#f7f8fb!important;color:#4b5565!important}
 /* 키워드 표: '행 추가'를 표 머리줄(복사·확대 아이콘 왼쪽)에 겹쳐 둔다 */
 #kw-tablebar{justify-content:flex-end;margin-bottom:-44px;padding-right:72px;position:relative;z-index:5;
@@ -105,12 +111,12 @@ th{background:#f7f8fb!important;color:#4b5565!important}
 .section-title{font-size:20px;font-weight:800;color:#1b2333;padding:4px 2px}
 #close-detail{align-self:flex-end}
 /* 실행 로그 */
-#log textarea{font-family:"Noto Sans Mono CJK KR",ui-monospace,monospace!important;font-size:11.5px!important;line-height:1.6!important;background:#fafbfd!important}
+#log textarea{font-size:12px!important;line-height:1.6!important;background:#fafbfd!important}
 """
 
 
 THEME = gr.themes.Soft(primary_hue="indigo", neutral_hue="slate", radius_size="md",
-                       font=["Noto Sans KR", "Malgun Gothic", "sans-serif"]).set(
+                       font=[gr.themes.Font(f) for f in FONTS]).set(
     body_background_fill="#f6f7fb",
     block_shadow="none", block_border_color="#e6e9f0", block_radius="12px",
     block_label_background_fill="transparent", block_label_text_color="#6b7486",
@@ -412,7 +418,7 @@ def diff_html(old: str, new: str, title: str) -> str:
             rows.append(f"<div style='color:#5b6577'>&nbsp; {t}</div>")
     body = "".join(rows) or "<div class='muted'>바뀐 줄이 없습니다.</div>"
     return (f"<div class='muted' style='margin-bottom:6px'>{title}</div>"
-            f"<div style='font-family:monospace;font-size:12px;line-height:1.7;border:1px solid #e3e7ef;"
+            f"<div style='font-size:12px;line-height:1.7;border:1px solid #e3e7ef;"
             f"border-radius:8px;padding:10px 12px;max-height:620px;overflow:auto;white-space:pre-wrap'>{body}</div>")
 
 
@@ -647,7 +653,7 @@ def detail_html(full: pd.DataFrame, table_id: str) -> str:
     conf = float(row["confidence"] or 0)
     tag_reasons = "".join(f"<div style='margin:3px 0'>{html.escape(p.strip())}</div>"
                           for p in row["high_risk_tag_reason"].split(" | ") if p.strip()) or "-"
-    conds = "".join(f"<div style='font-family:monospace;background:#fafbfd;border:1px solid #e3e7ef;border-radius:6px;"
+    conds = "".join(f"<div style='background:#fafbfd;border:1px solid #e3e7ef;border-radius:6px;"
                     f"padding:6px 8px;margin:3px 0'>{html.escape(c.strip())}</div>"
                     for c in row["row_conditions"].split(" | ") if c.strip()) or "-"
     reviews = "".join(f"<div style='margin:3px 0'>{html.escape(r.strip())}</div>"
@@ -667,8 +673,8 @@ def detail_html(full: pd.DataFrame, table_id: str) -> str:
             + section("민감 행 조건", conds)
             + section("매칭 키워드", html.escape(row["matched_keywords"]) or "-")
             + section("고위험 유형", tag_reasons)
-            + section("판정 이유", html.escape(row["reason"]) or "-", "color:#5b6577")
-            + section("추가 검토 필요 사항", reviews, "color:#5b6577")
+            + section("판정 이유", html.escape(row["reason"]) or "-")
+            + section("추가 검토 필요 사항", reviews)
             + (section("error", html.escape(row["error"]), "color:#d8434b") if row["error"] else ""))
 
 
@@ -880,4 +886,4 @@ def launch():
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S"))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger().addHandler(handler)
-    build().launch(inbrowser=True, css=CSS, theme=THEME)
+    build().launch(inbrowser=True, css=CSS.replace("__FONT__", FONT_CSS), theme=THEME)
