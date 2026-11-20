@@ -35,7 +35,7 @@ FONTS = ["Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", "sans-serif"]
 FONT_CSS = ", ".join(f'"{f}"' if " " in f else f for f in FONTS)
 
 CSS = """
-.gradio-container{max-width:1440px!important}
+.gradio-container{max-width:none!important;padding-left:32px!important;padding-right:32px!important}   /* 화면 너비에 맞춰 늘어남 */
 /* 글꼴 통일: Gradio 기본 글꼴(IBM Plex 등)·고정폭 글꼴 대신 FONTS 하나만 쓴다 */
 .gradio-container, .gradio-container *:not(svg):not(path), .cm-editor, .cm-content{font-family:__FONT__!important}
 /* 상단 탭 = 진행 단계 */
@@ -613,6 +613,11 @@ DECISION_STYLE = {"민감": "background-color:#fdecec;color:#d8434b;font-weight:
                   "에러": "background-color:#eef0f3;color:#6b7280;font-weight:700"}
 
 
+# 결과 표 열 폭: 모두 %로 지정(합 100%)해서 화면이 넓어지면 표도 꽉 차게 늘어난다.
+# (px 고정 폭을 섞으면 넓은 화면에서 오른쪽이 비거나 넘친다)
+RESULT_COL_WIDTHS = ["17%", "8%", "10%", "10%", "14%", "14%", "17%", "10%"]
+
+
 def result_table(full: pd.DataFrame, active: str | None):
     """KPI 필터를 적용한 결과 표(색 포함)."""
     cols = ["테이블명", "잠금 여부", "민감 여부", "검토", "민감 컬럼", "민감 행 조건", "고위험 유형", "신뢰도"]
@@ -750,7 +755,7 @@ def on_select(full, shown, evt: gr.SelectData):
 # 화면 구성
 # =====================================================================
 def build() -> gr.Blocks:
-    with gr.Blocks(title="고위험 데이터 분류기") as demo:
+    with gr.Blocks(title="고위험 데이터 분류기", fill_width=True) as demo:
         gr.HTML("<div class='apptitle'>고위험 데이터 분류기</div>")
         with gr.Tabs(elem_id="steps", selected="run") as tabs:   # 앱을 열면 STEP 3(실행 · 결과)부터
 
@@ -767,7 +772,7 @@ def build() -> gr.Blocks:
                     kw_addbtn = gr.Button("＋ 행 추가", size="sm", scale=0, min_width=90)
                 kw_table = gr.Dataframe(value=kw_view(first, first, "전체", ""), interactive=True, wrap=True,
                                         static_columns=[0], max_height=520,
-                                        column_widths=["56px", "90px", "120px", "24%", "20%", "110px", "120px", "120px", "80px"],
+                                        column_widths=["5%", "8%", "11%", "24%", "18%", "9%", "9%", "9%", "7%"],   # 합 100% → 화면 너비에 맞춰 늘어남
                                         label="셀을 눌러 편집 · 초록 = 신규, 노랑 = 수정, 회색 = history '삭제', 빨강 = 저장 전에 고칠 칸")
                 with gr.Row(elem_classes="actionbar"):
                     kw_bar = gr.HTML(b0)
@@ -861,7 +866,7 @@ def build() -> gr.Blocks:
                         tags = gr.HTML(tag_html(pd.DataFrame()))
                         preview = gr.Dataframe(value=result_table(pd.DataFrame(), None), interactive=False, wrap=True,
                                                show_search="search", max_height=560,
-                                               column_widths=["18%", "80px", "80px", "80px", "13%", "13%", "12%", "60px"],
+                                               column_widths=RESULT_COL_WIDTHS,
                                                label="행을 누르면 오른쪽에 상세가 열립니다")
 
                     # 오른쪽: 상세 (행을 누르면 열림)
