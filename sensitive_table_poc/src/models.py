@@ -47,6 +47,7 @@ class TableMeta(BaseModel):
     table_name: str
     table_kor_name: str = ""       # 테이블한글명
     source_table: str = ""         # 원천테이블 (UI 표시용, LLM에는 보내지 않음)
+    locked: bool = False           # 잠금여부가 "Y"인 테이블 (UI 표시용, LLM에는 보내지 않음)
     table_desc: str = ""
     columns: list[ColumnMeta] = Field(default_factory=list)
 

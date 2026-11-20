@@ -4,8 +4,8 @@
 
 - 키워드 파일(keywords.txt) 열: sys_cd, keyword, description, equivalent_terms, high_risk_tag,
                               source, source_detail, history
-- 크롤링 결과 파일 열(한글): 시스템코드, 스키마, 테이블명(물리), 테이블한글명, 원천테이블, 설명, 컬럼, 컬럼설명,
-                      동치컬럼, 표준용어, 표준용어내용, 데이터타입, 샘플값, 샘플산출방법
+- 크롤링 결과 파일 열(한글): 시스템코드, 스키마, 테이블명(물리), 테이블한글명, 원천테이블, 잠금여부, 설명, 컬럼,
+                      컬럼설명, 동치컬럼, 표준용어, 표준용어내용, 데이터타입, 샘플값, 샘플산출방법
   (테이블명, 추가설명, 속성 열은 쓰지 않는다)
 """
 from pathlib import Path
@@ -20,6 +20,7 @@ CRAWL_COLUMNS = {
     "테이블명(물리)": "table_name",
     "테이블한글명": "table_kor_name",
     "원천테이블": "source_table",
+    "잠금여부": "locked",
     "설명": "table_desc",
     "컬럼": "column_name",
     "컬럼설명": "column_desc",
@@ -101,6 +102,7 @@ def load_tables(path: str) -> list[TableMeta]:
                 table_name=row["table_name"],
                 table_kor_name=row["table_kor_name"],
                 source_table=row["source_table"],
+                locked=row["locked"].upper() == "Y",
                 table_desc=row["table_desc"],
             )
 

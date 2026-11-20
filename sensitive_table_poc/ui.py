@@ -18,17 +18,14 @@ import gradio as gr
 import pandas as pd
 
 import app
-from src.classifier import SensitiveTableClassifier
-from src.config import load_settings
-from src.llm_client import create_client
-from src.loader import load_keywords, load_tables, read_txt
+from src.loader import load_tables, read_txt
 from src.prompt import PROMPT_DIR
 
 KEYWORDS_FILE = app.KEYWORDS_FILE
 PROMPT_FILES = {"system": PROMPT_DIR / "system_prompt.md", "tag": PROMPT_DIR / "tag_prompt.md"}
 PROMPT_TITLES = {"system": "민감 판정 프롬프트", "tag": "고위험 태그 프롬프트"}
 MODELS = ["HCP-LLM-Latest", "HCP-Medium-Latest", "HCP-Small-Latest"]   # 첫 번째가 기본값
-REASONING_EFFORTS = ["low", "high", "xhigh"]
+REASONING_EFFORTS = ["low", "medium", "high", "xhigh"]
 DEFAULT_EFFORT = "high"
 TAG_COLORS = {"재무성과": "#d8434b", "영업기밀": "#e98b3a", "사업계획": "#2f5bea",
               "기술노하우": "#7a5af0", "전략제품": "#1f9d6b"}
@@ -39,22 +36,17 @@ CSS = """
 /* 상단 단계 표시: 화면 너비를 3등분한 STEP 1 → 2 → 3 */
 #steps > .tab-wrapper{border-bottom:none!important;height:auto!important;margin:4px 0 18px;padding:0}
 #steps > .tab-wrapper > [role=tablist]{display:flex;gap:14px;width:100%;height:auto}
-#steps [role=tab]{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto!important;
-  padding:10px 4px 0!important;margin:0!important;border:none!important;border-top:3px solid #dfe3ea!important;
+#steps > .tab-wrapper [role=tab]{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto!important;
+  padding:10px 4px 18px!important;margin:0!important;border:none!important;border-top:3px solid #dfe3ea!important;
   border-radius:0!important;background:transparent!important;color:#8a93a5!important;font-size:15px;font-weight:700;text-align:left}
-#steps [role=tab]::before{font-size:11px;font-weight:700;letter-spacing:.06em;color:#a3abb9}
-#steps [role=tab]::after{content:"";position:static!important;display:block!important;width:auto!important;height:auto!important;
-  background:none!important;font-size:12px;font-weight:400;color:#a3abb9}
-#steps [role=tab][data-tab-id=keyword]::before{content:"STEP 1"}
-#steps [role=tab][data-tab-id=prompt]::before{content:"STEP 2"}
-#steps [role=tab][data-tab-id=run]::before{content:"STEP 3"}
-#steps [role=tab][data-tab-id=keyword]::after{content:"판정에 쓸 고위험 키워드 확인 · 수정"}
-#steps [role=tab][data-tab-id=prompt]::after{content:"LLM 판정 기준 문구 조정 (필요할 때만)"}
-#steps [role=tab][data-tab-id=run]::after{content:"스키마를 골라 실행하고 결과 확인"}
-#steps [role=tab]:hover{color:#4b5565!important;border-top-color:#c3c9d6!important}
-#steps [role=tab][aria-selected=true]{color:#1b2333!important;border-top-color:#4f46e5!important}
-#steps [role=tab][aria-selected=true]::before{color:#4f46e5}
-#steps [role=tab][aria-selected=true]::after{color:#5b6577}
+#steps > .tab-wrapper [role=tab]::before{font-size:11px;font-weight:700;letter-spacing:.06em;color:#a3abb9}
+#steps > .tab-wrapper [role=tab]::after{display:none!important}
+#steps > .tab-wrapper [role=tab][data-tab-id=keyword]::before{content:"STEP 1"}
+#steps > .tab-wrapper [role=tab][data-tab-id=prompt]::before{content:"STEP 2"}
+#steps > .tab-wrapper [role=tab][data-tab-id=run]::before{content:"STEP 3"}
+#steps > .tab-wrapper [role=tab]:hover{color:#4b5565!important;border-top-color:#c3c9d6!important}
+#steps > .tab-wrapper [role=tab][aria-selected=true]{color:#1b2333!important;border-top-color:#4f46e5!important}
+#steps > .tab-wrapper [role=tab][aria-selected=true]::before{color:#4f46e5}
 /* 요약 카드 */
 .cards{display:flex;gap:12px}
 .card{flex:1;background:#fff;border:1px solid #e3e7ef;border-radius:10px;padding:12px 14px}
@@ -73,7 +65,7 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 .muted{color:#8a93a5;font-size:12px}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
 /* 공통 정리 */
-.apptitle{font-size:20px;font-weight:800;color:#1b2333;padding:4px 0 2px}
+.apptitle{font-size:28px;font-weight:800;color:#1b2333;padding:8px 0 4px;letter-spacing:-.01em}
 /* 프롬프트 목차: 박스 없이 왼쪽 선 하나로 된 목록 */
 .outline{background:transparent!important;border:none!important;padding:4px 0!important}
 .outline .wrap{flex-direction:column!important;gap:0!important}
@@ -85,7 +77,7 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 .outline label.selected span{color:#4338ca!important}
 /* 세그먼트 버튼 (편집/변경 비교, 추론 정도) */
 .seg .wrap{display:inline-flex!important;gap:0!important;border:1px solid #dfe3ea;border-radius:8px;overflow:hidden;background:#fff;flex-wrap:nowrap!important}
-.seg label{border:none!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;margin:0!important;padding:6px 14px!important;
+.seg label{border:none!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;margin:0!important;padding:6px 10px!important;
   border-right:1px solid #dfe3ea!important;color:#5b6577}
 .seg label:last-child{border-right:none!important}
 .seg label input{display:none!important}
@@ -102,7 +94,12 @@ button.secondary{border:1px solid #dfe3ea!important;background:#fff!important}
 button.secondary:hover{background:#f3f5fa!important}
 [role=gridcell], [role=gridcell] *, th, th *{font-family:"Noto Sans KR","Malgun Gothic",sans-serif!important;font-size:13px}
 th{background:#f7f8fb!important;color:#4b5565!important}
-.note-plain{background:transparent!important;padding:0 12px 8px!important}
+/* 키워드 표: '행 추가'를 표 머리줄(복사·확대 아이콘 왼쪽)에 겹쳐 둔다 */
+#kw-tablebar{justify-content:flex-end;margin-bottom:-44px;padding-right:72px;position:relative;z-index:5;
+  background:transparent!important;border:none!important;pointer-events:none}
+#kw-tablebar button{pointer-events:auto}
+.section-title{font-size:20px;font-weight:800;color:#1b2333;padding:4px 2px}
+#close-detail{align-self:flex-end}
 /* 실행 로그 */
 #log textarea{font-family:"Noto Sans Mono CJK KR",ui-monospace,monospace!important;font-size:11.5px!important;line-height:1.6!important;background:#fafbfd!important}
 """
@@ -154,7 +151,7 @@ class RunState:
         self.logs = deque(maxlen=300)
         self.started = 0.0
         self.result_path = None
-        self.table_info = {}          # table_id → (테이블 한글명, 원천 테이블명), 상세 패널용
+        self.table_info = {}          # table_id → TableMeta (한글명 · 원천 · 잠금여부, 화면 표시용)
         self.stop_event = threading.Event()
 
     def reset(self, total: int):
@@ -459,37 +456,6 @@ def save_prompts(sys_text: str, tag_text: str):
             gr.Dropdown(choices=version_choices("tag"), value=None))
 
 
-def table_choices():
-    """1건 시험용 테이블 목록: 파일이 있는 스키마의 테이블 전부."""
-    out = []
-    for s in app.SCHEMAS:
-        p = app.tables_file(s)
-        if p.exists():
-            out += [(t.table_id, f"{s}|{t.table_id}") for t in load_tables(p)]
-    return out
-
-
-def test_one(choice: str, sys_text: str, tag_text: str, model: str, effort: str) -> str:
-    """편집 중인(저장 전) 프롬프트로 테이블 1건만 판정해 본다. 결과 파일은 만들지 않는다."""
-    if not choice:
-        raise gr.Error("시험할 테이블을 고르세요.")
-    schema, table_id = choice.split("|", 1)
-    table = next(t for t in load_tables(app.tables_file(schema)) if t.table_id == table_id)
-    s = load_settings(model=model, reasoning_effort=effort)
-    clf = SensitiveTableClassifier(load_keywords(KEYWORDS_FILE), s, create_client(s))
-    clf.system_prompt = sys_text                       # 저장 전 편집본을 그대로 사용
-    if clf.tagger:
-        clf.tagger.system_prompt = tag_text
-    t0 = time.time()
-    r = clf.classify(table)
-    cols = ", ".join(d.column_name for d in r.sensitive_data if d.type == "column") or "-"
-    conds = ", ".join(d.row_condition or "" for d in r.sensitive_data if d.type == "row_condition") or "-"
-    tags = ", ".join(t.tag for t in r.high_risk_tags) or "-"
-    return (f"**{r.table_id}** → **{r.decision}** · 신뢰도 {r.confidence:.2f} · {time.time() - t0:.1f}초\n\n"
-            f"- 민감 컬럼: {cols}\n- 민감 행 조건: {conds}\n- 고위험 유형: {tags}\n"
-            f"- 검토 사유: {', '.join(r.review_reasons) or '-'}\n- 판정 이유: {r.reason or '-'}")
-
-
 def prompt_editor(key: str, text_state: gr.State):
     """프롬프트 1개의 편집 화면(목차 · 편집/비교 · 이전 버전)을 만든다."""
     text = read_prompt(key)
@@ -558,10 +524,11 @@ def schema_choices():
 
 
 def schema_info(schema: str) -> str:
+    """스키마 칩 위에 보이는 안내 문구."""
     p = app.tables_file(schema)
     if not p.exists():
-        return f"<span class='muted' style='color:#d8434b'>{p.name} 파일이 없습니다</span>"
-    return f"<span class='muted'>테이블 수: {len(load_tables(p))}개</span>"
+        return f"{p.name} 파일이 없습니다"
+    return f"테이블 수: {len(load_tables(p))}개"
 
 
 def stage_html() -> str:
@@ -636,7 +603,7 @@ DECISION_STYLE = {"민감": "background-color:#fdecec;color:#d8434b;font-weight:
 
 def result_table(full: pd.DataFrame, active: str | None):
     """KPI 필터를 적용한 결과 표(색 포함)."""
-    cols = ["테이블", "판정", "검토", "민감 컬럼", "민감 행 조건", "고위험 유형", "신뢰도"]
+    cols = ["테이블명", "잠금 여부", "민감 여부", "검토", "민감 컬럼", "민감 행 조건", "고위험 유형", "신뢰도"]
     if full.empty:
         return pd.DataFrame(columns=cols)
     df = full
@@ -645,15 +612,27 @@ def result_table(full: pd.DataFrame, active: str | None):
     elif active:
         df = df[df["decision"] == active]
     view = pd.DataFrame({
-        "테이블": df["table_id"], "판정": df["decision"].map(DECISION_LABEL).fillna(df["decision"]),
+        "테이블명": df["table_id"],
+        "잠금 여부": df["table_id"].map(lambda t: "🔒" if is_locked(t) else ""),
+        "민감 여부": df["decision"].map(DECISION_LABEL).fillna(df["decision"]),
         "검토": df["needs_review"].map({"True": "검토 필요"}).fillna(""),
         "민감 컬럼": df["sensitive_columns"], "민감 행 조건": df["row_conditions"],
         "고위험 유형": df["high_risk_tag"].str.replace("|", " · ", regex=False),
         "신뢰도": pd.to_numeric(df["confidence"], errors="coerce").round(2).astype(str).replace("nan", ""),
     }).reset_index(drop=True)
     return (view.style
-            .map(lambda v: DECISION_STYLE.get(v, ""), subset=["판정"])
+            .map(lambda v: DECISION_STYLE.get(v, ""), subset=["민감 여부"])
             .map(lambda v: "background-color:#fdf3e1;color:#c98111;font-weight:700" if v else "", subset=["검토"]))
+
+
+def is_locked(table_id: str) -> bool:
+    meta = STATE.table_info.get(table_id)
+    return bool(meta and meta.locked)
+
+
+def section(title: str, body: str, style: str = "") -> str:
+    """상세 패널의 항목 1개: 굵은 제목 + 내용. 항목 사이는 한 줄(약 20px) 띄운다."""
+    return f"<div style='margin-bottom:20px'><b>{title}</b><div style='margin-top:4px;{style}'>{body}</div></div>"
 
 
 def detail_html(full: pd.DataFrame, table_id: str) -> str:
@@ -665,22 +644,26 @@ def detail_html(full: pd.DataFrame, table_id: str) -> str:
     conds = "".join(f"<div style='font-family:monospace;background:#fafbfd;border:1px solid #e3e7ef;border-radius:6px;"
                     f"padding:6px 8px;margin:3px 0'>{html.escape(c.strip())}</div>"
                     for c in row["row_conditions"].split(" | ") if c.strip()) or "-"
-    kor_name, source_table = STATE.table_info.get(table_id, ("", ""))
-    return (f"<h3 style='margin:0'>{html.escape(table_id)}</h3>"
+    reviews = "".join(f"<div style='margin:3px 0'>{html.escape(r.strip())}</div>"
+                      for r in row["review_reasons"].split(" | ") if r.strip()) or "-"
+    meta = STATE.table_info.get(table_id)
+    kor_name, source_table = (meta.table_kor_name, meta.source_table) if meta else ("", "")
+    lock = " <span title='잠금 테이블'>🔒</span>" if is_locked(table_id) else ""
+    return (f"<h3 style='margin:0'>{html.escape(table_id)}{lock}</h3>"
             f"<div class='muted'>{html.escape(kor_name) or '-'}</div>"
             f"<div class='muted'>원천: {html.escape(source_table) or '-'}</div>"
-            f"<div style='display:grid;grid-template-columns:80px 1fr;gap:6px 10px;margin:12px 0;font-size:13px'>"
+            f"<div style='display:grid;grid-template-columns:80px 1fr;gap:6px 10px;margin:12px 0 20px;font-size:13px'>"
             f"<span class='muted'>판정</span><span><span class='badge' style='{DECISION_STYLE.get(label, '')}'>{label}</span></span>"
             f"<span class='muted'>신뢰도</span><span><span style='display:inline-block;width:120px;height:8px;background:#e8ecf3;"
             f"border-radius:4px;vertical-align:middle'><span style='display:block;height:100%;width:{conf * 100:.0f}%;"
-            f"background:{'#c98111' if conf < 0.7 else '#1f9d6b'};border-radius:4px'></span></span> {conf:.2f}</span>"
-            f"<span class='muted'>검토 사유</span><span>{html.escape(row['review_reasons']) or '-'}</span></div>"
-            f"<b>민감 컬럼</b><div style='margin:4px 0 10px'>{html.escape(row['sensitive_columns']) or '-'}</div>"
-            f"<b>민감 행 조건</b><div style='margin:4px 0 10px'>{conds}</div>"
-            f"<b>매칭 키워드</b><div style='margin:4px 0 10px'>{html.escape(row['matched_keywords']) or '-'}</div>"
-            f"<b>고위험 유형</b><div style='margin:4px 0 10px'>{tag_reasons}</div>"
-            f"<b>판정 이유</b><div style='margin:4px 0 10px;color:#5b6577'>{html.escape(row['reason']) or '-'}</div>"
-            + (f"<b>error</b><div style='color:#d8434b'>{html.escape(row['error'])}</div>" if row["error"] else ""))
+            f"background:{'#c98111' if conf < 0.7 else '#1f9d6b'};border-radius:4px'></span></span> {conf:.2f}</span></div>"
+            + section("민감 컬럼", html.escape(row["sensitive_columns"]) or "-")
+            + section("민감 행 조건", conds)
+            + section("매칭 키워드", html.escape(row["matched_keywords"]) or "-")
+            + section("고위험 유형", tag_reasons)
+            + section("판정 이유", html.escape(row["reason"]) or "-", "color:#5b6577")
+            + section("추가 검토 필요 사항", reviews, "color:#5b6577")
+            + (section("error", html.escape(row["error"]), "color:#d8434b") if row["error"] else ""))
 
 
 def file_size_label(path) -> str:
@@ -720,7 +703,7 @@ def start_run(schema, model, effort):
         raise gr.Error("data/keywords.txt 파일이 없습니다.")
     tables = load_tables(table_path)
     STATE.reset(total=len(tables))
-    STATE.table_info = {t.table_id: (t.table_kor_name, t.source_table) for t in tables}
+    STATE.table_info = {t.table_id: t for t in tables}
     worker = threading.Thread(target=run_pipeline, args=(schema, model, effort), daemon=True)
     worker.start()
     keep = [gr.update()] * 5
@@ -747,7 +730,7 @@ def toggle_filter(key: str):
 
 
 def on_select(full, shown, evt: gr.SelectData):
-    table_id = shown.iloc[evt.index[0]]["테이블"]
+    table_id = shown.iloc[evt.index[0]]["테이블명"]
     return gr.Column(visible=True), detail_html(full, table_id)
 
 
@@ -765,11 +748,11 @@ def build() -> gr.Blocks:
                 kw_full, kw_orig = gr.State(first), gr.State(first)
                 c0, b0, m0 = kw_summary(first, first)
                 kw_cards = gr.HTML(c0)
-                with gr.Row():
-                    kw_query = gr.Textbox(placeholder="🔍 키워드 · 설명 · 유사어 검색", show_label=False, scale=2, container=False)
-                    kw_addbtn = gr.Button("＋ 행 추가", size="sm", scale=0, min_width=90)
+                kw_query = gr.Textbox(placeholder="🔍 키워드 · 설명 · 유사어 검색", show_label=False, container=False)
                 kw_sys = gr.Radio(sys_choices(first), value="전체", label="시스템 (sys_cd)", elem_classes="chips")
                 kw_msg = gr.Markdown(m0)
+                with gr.Row(elem_id="kw-tablebar"):          # 표 머리줄의 복사·확대 아이콘 왼쪽에 겹쳐 놓는다
+                    kw_addbtn = gr.Button("＋ 행 추가", size="sm", scale=0, min_width=90)
                 kw_table = gr.Dataframe(value=kw_view(first, first, "전체", ""), interactive=True, wrap=True,
                                         static_columns=[0, 1], max_height=520,
                                         column_widths=["56px", "70px", "90px", "120px", "22%", "18%", "110px", "120px", "120px", "80px"],
@@ -798,13 +781,6 @@ def build() -> gr.Blocks:
                         ed_sys = prompt_editor("system", sys_text)
                     with gr.Tab(PROMPT_TITLES["tag"]):
                         ed_tag = prompt_editor("tag", tag_text)
-                with gr.Accordion("한 테이블로 미리 시험 (저장 전 편집본으로 1건만 판정, 결과 파일은 만들지 않음)", open=False):
-                    with gr.Row():
-                        t_table = gr.Dropdown(table_choices(), label="테이블", scale=2)
-                        t_model = gr.Dropdown(MODELS, value=MODELS[0], label="LLM 모델", scale=1)
-                        t_effort = gr.Radio(REASONING_EFFORTS, value=DEFAULT_EFFORT, label="추론 정도", scale=1, elem_classes="seg")
-                        t_btn = gr.Button("▶ 1건 실행", size="sm", scale=0, min_width=100)
-                    t_out = gr.Markdown()
                 with gr.Row(elem_classes="actionbar"):
                     pr_bar = gr.HTML(prompt_bar(read_prompt("system"), read_prompt("tag")))
                     pr_revert = gr.Button("↺ 원본으로 되돌리기", size="sm", scale=0, min_width=150)
@@ -821,8 +797,6 @@ def build() -> gr.Blocks:
 
                 for ed in (ed_sys, ed_tag):
                     ed["editor"].input(prompt_bar, [sys_text, tag_text], pr_bar, trigger_mode="always_last")
-                t_btn.click(current, cur_in, [sys_text, tag_text]).then(
-                    test_one, [t_table, sys_text, tag_text, t_model, t_effort], t_out)
                 pr_save.click(current, cur_in, [sys_text, tag_text]).then(
                     save_prompts, [sys_text, tag_text],
                     [pr_bar, ed_sys["info"], ed_tag["info"], ed_sys["version"], ed_tag["version"]])
@@ -853,8 +827,8 @@ def build() -> gr.Blocks:
                         with gr.Group():
                             choices = schema_choices()
                             default = next((v for l, v in choices if "없음" not in l), app.SCHEMAS[0])
-                            schema = gr.Radio(choices, value=default, label="스키마", elem_classes="chips")
-                            schema_note = gr.HTML(schema_info(default), elem_classes="note-plain")
+                            schema = gr.Radio(choices, value=default, label="스키마", info=schema_info(default),
+                                              elem_classes="chips")
                             model = gr.Dropdown(MODELS, value=MODELS[0], label="LLM 모델")
                             effort = gr.Radio(REASONING_EFFORTS, value=DEFAULT_EFFORT, label="추론 정도 (reasoning_effort)", elem_classes="seg")
                         with gr.Row():
@@ -866,8 +840,8 @@ def build() -> gr.Blocks:
 
                     # 가운데: 결과 미리보기 → KPI 카드(누르면 필터) → 유형 분포 → 표
                     with gr.Column(scale=3):
-                        with gr.Row(equal_height=True):
-                            gr.Markdown("### 결과 미리보기")
+                        with gr.Row():
+                            gr.HTML("<div class='section-title'>민감 테이블 식별 결과</div>", container=False, padding=False)
                             download_btn = download_button(None)
                         with gr.Row():
                             kpis = [gr.Button(f"{name}\n-", elem_classes=["kpi", cls], min_width=110) for _, name, cls in KPI]
@@ -875,16 +849,16 @@ def build() -> gr.Blocks:
                         tags = gr.HTML(tag_html(pd.DataFrame()))
                         preview = gr.Dataframe(value=result_table(pd.DataFrame(), None), interactive=False, wrap=True,
                                                show_search="search", max_height=560,
+                                               column_widths=["18%", "80px", "80px", "80px", "13%", "13%", "12%", "60px"],
                                                label="행을 누르면 오른쪽에 상세가 열립니다")
 
                     # 오른쪽: 상세 (행을 누르면 열림)
                     with gr.Column(scale=1, min_width=300, visible=False) as detail_col:
-                        close_btn = gr.Button("✕ 닫기", size="sm", scale=0, min_width=70)
+                        close_btn = gr.Button("✕ 닫기", size="sm", scale=0, min_width=70, elem_id="close-detail")
                         detail = gr.HTML()
 
-                schema.change(schema_info, schema, schema_note)
-                run_tab.select(lambda s: (gr.Radio(choices=schema_choices(), value=s), schema_info(s)),
-                               schema, [schema, schema_note])
+                schema.input(lambda s: gr.Radio(info=schema_info(s)), schema, schema)
+                run_tab.select(lambda s: gr.Radio(choices=schema_choices(), value=s, info=schema_info(s)), schema, schema)
                 run_btn.click(start_run, [schema, model, effort],
                               [stage, log_box, *kpis, full_result, active, tags, preview, download_btn])
                 stop_btn.click(stop_run)

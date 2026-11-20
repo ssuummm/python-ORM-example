@@ -23,7 +23,7 @@ from src.writer import ResultWriter, write_summary
 
 # ── 실행 설정 (필요하면 여기 값만 바꾼다) ──────────────────
 ROOT = Path(__file__).parent
-SCHEMAS = ["cim", "erp", "mmd", "pis", "scm", "hq1"]   # 선택 가능한 스키마 (첫 번째가 기본값)
+SCHEMAS = ["cim", "erp", "mmd", "pis", "scm", "hq1", "test"]   # 선택 가능한 스키마 (첫 번째가 기본값)
 KEYWORDS_FILE = ROOT / "data" / "keywords.txt"
 OUT_DIR = ROOT / "output"
 WORKERS = 4                     # 동시에 처리할 테이블 수
