@@ -131,7 +131,6 @@ def build_table_payload(table: TableMeta) -> dict:
         "sys_cd": table.sys_cd,
         "table_name": table.table_name,
         "table_kor_name": table.table_kor_name,
-        "source_table": table.source_table,
         "table_desc": table.table_desc,
         "columns": columns,
     }
