@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -88,16 +87,6 @@ def format_elapsed(seconds: float) -> str:
     if minutes:
         return f"{minutes}분 {sec:.1f}초"
     return f"{sec:.1f}초"
-
-
-def main() -> int:
-    """UI 없이 터미널에서만 실행할 때 사용 (python -c "import app; app.main()")."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
-    start = time.perf_counter()
-    try:
-        return 0 if run() else 1
-    finally:
-        print(f"\n총 소요 시간: {format_elapsed(time.perf_counter() - start)}")
 
 
 if __name__ == "__main__":

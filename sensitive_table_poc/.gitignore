@@ -5,4 +5,4 @@ __pycache__/
 # 사내 실데이터·실행 결과·백업은 올리지 않는다
 data/
 backup/
-output/result_*.xlsx
+output/

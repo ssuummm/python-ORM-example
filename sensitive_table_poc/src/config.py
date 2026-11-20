@@ -1,4 +1,4 @@
-"""실행 설정. 환경변수 → CLI 인자 순으로 덮어쓴다."""
+"""실행 설정. 환경변수 값을 읽고, UI에서 고른 값(모델·추론 정도)으로 덮어쓴다."""
 from __future__ import annotations
 
 import os
@@ -26,8 +26,6 @@ class Settings:
 
     # --- 입력 구성 ---
     max_columns_per_call: int = 60  # 컬럼이 많은 테이블은 분할 호출
-    max_sample_values: int = 5      # 컬럼당 LLM에 보낼 샘플 값 개수
-    send_raw_values: bool = False   # [확인 필요] 사내 LLM으로 원본 값 전송 허용 여부. 기본은 마스킹
 
     # --- 후처리 ---
     review_confidence_threshold: float = 0.7  # 이 값 미만이면 needs_review=true
@@ -45,7 +43,6 @@ def load_settings(**overrides) -> Settings:
         max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
         timeout_sec=int(os.getenv("LLM_TIMEOUT_SEC", "120")),
         json_mode=_env_bool("LLM_JSON_MODE", True),
-        send_raw_values=_env_bool("SEND_RAW_VALUES", False),
     )
     valid = {f.name for f in fields(Settings)}
     for k, v in overrides.items():

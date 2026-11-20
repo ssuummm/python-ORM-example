@@ -11,19 +11,6 @@ import pandas as pd
 from .models import TableResult
 
 
-def load_done_ids(out_dir: Path) -> set[str]:
-    p = out_dir / "results.jsonl"
-    if not p.exists():
-        return set()
-    done = set()
-    for line in p.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            r = json.loads(line)
-            if r.get("decision") != "error":   # 오류 건은 재처리
-                done.add(r["table_id"])
-    return done
-
-
 class ResultWriter:
     def __init__(self, out_dir: Path, append: bool):
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -83,14 +70,3 @@ def write_summary(out_dir: Path) -> Path:
     path = out_dir / f"result_{timestamp}.xlsx"
     pd.DataFrame(rows, columns=SUMMARY_COLUMNS).to_excel(path, index=False, sheet_name="result")
     return path
-
-
-def write_prompts(out_dir: Path, system_prompt: str, rendered: dict[str, list[str]]) -> Path:
-    d = out_dir / "prompts"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "_system_prompt.md").write_text(system_prompt, encoding="utf-8")
-    for table_id, users in rendered.items():
-        for i, u in enumerate(users, 1):
-            suffix = f"_part{i}" if len(users) > 1 else ""
-            (d / f"{table_id}{suffix}.user.md").write_text(u, encoding="utf-8")
-    return d

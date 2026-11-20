@@ -44,10 +44,6 @@ class SensitiveTableClassifier:
             prompts.append((ch, ch_hits, user))
         return kw_index, hits, prompts
 
-    def render_prompts(self, table: TableMeta) -> list[str]:
-        """dry-run: LLM 호출 없이 실제 전송될 사용자 프롬프트 확인."""
-        return [u for _, _, u in self._prepare(table)[2]]
-
     # ------------------------------------------------------------------
     def _call(self, user: str, context: dict) -> tuple[LLMDecision, int]:
         prompt, last_err = user, None

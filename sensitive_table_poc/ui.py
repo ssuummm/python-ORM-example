@@ -192,7 +192,6 @@ class UILogHandler(logging.Handler):
 #   - 화면 표 : kw_full을 시스템·검색어로 거른 것. 편집하면 No 기준으로 kw_full에 합친다
 # =====================================================================
 KW_COLS = ["sys_cd", "keyword", "description", "equivalent_terms", "high_risk_tag", "source", "source_detail", "history"]
-VIEW_COLS = ["No"] + KW_COLS
 ROW_COLORS = {"신규": "#e6f6ef", "수정": "#fdf3e1"}
 
 
