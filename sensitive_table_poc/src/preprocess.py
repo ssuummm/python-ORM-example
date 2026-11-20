@@ -132,6 +132,7 @@ def build_table_payload(table: TableMeta) -> dict:
         "table_name": table.table_name,
         "table_kor_name": table.table_kor_name,
         "table_desc": table.table_desc,
+        "locked": "Y" if table.locked else "N",                # Y: 권한이 없어 대표 값을 수집하지 못한 테이블
         "columns": columns,
     }
     return {k: v for k, v in payload.items() if v != ""}   # 비어 있는 테이블 항목은 뺀다
