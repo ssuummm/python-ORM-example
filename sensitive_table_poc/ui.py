@@ -65,7 +65,7 @@ button.kpi.primary{box-shadow:0 0 0 2px #2f5bea;background:#e9efff;color:#1b2333
 .muted{color:#8a93a5;font-size:12px}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
 /* 공통 정리 */
-.apptitle{font-size:28px;font-weight:800;color:#1b2333;padding:8px 0 4px;letter-spacing:-.01em}
+.apptitle{font-size:24px;font-weight:800;color:#1b2333;padding:8px 0 4px;letter-spacing:-.01em}
 /* 프롬프트 목차: 박스 없이 왼쪽 선 하나로 된 목록 */
 .outline{background:transparent!important;border:none!important;padding:4px 0!important}
 .outline .wrap{flex-direction:column!important;gap:0!important}
@@ -186,7 +186,7 @@ class UILogHandler(logging.Handler):
 #   - 화면 표 : kw_full을 시스템·검색어로 거른 것. 편집하면 No 기준으로 kw_full에 합친다
 # =====================================================================
 KW_COLS = ["sys_cd", "keyword", "description", "equivalent_terms", "high_risk_tag", "source", "source_detail", "history"]
-VIEW_COLS = ["No", "변경"] + KW_COLS
+VIEW_COLS = ["No"] + KW_COLS
 ROW_COLORS = {"신규": "#e6f6ef", "수정": "#fdf3e1"}
 
 
@@ -236,21 +236,23 @@ def find_problems(full: pd.DataFrame) -> pd.DataFrame:
 
 
 def kw_view(full, orig, sys_sel, query):
-    """화면에 보여 줄 표(색 포함). 신규 행은 검색어와 무관하게 항상 보여 준다."""
+    """화면에 보여 줄 표(색 포함). 신규 행은 검색어와 무관하게 항상 보여 준다.
+    변경 상태(신규/수정/유지)는 표에 열로 넣지 않고 행 색으로만 보여 준다."""
     df = full.copy()
-    df.insert(1, "변경", change_status(full, orig))
+    status = pd.Series(change_status(full, orig), index=df.index)
     if sys_sel and sys_sel != "전체":
-        df = df[(df["sys_cd"] == sys_sel) | (df["변경"] == "신규")]
+        df = df[(df["sys_cd"] == sys_sel) | (status == "신규")]
     if query:
         hit = df[KW_COLS].apply(lambda col: col.str.contains(query, case=False, regex=False)).any(axis=1)
-        df = df[hit | (df["변경"] == "신규")]
+        df = df[hit | (status[df.index] == "신규")]
+    status = dict(zip(df["No"], status[df.index]))          # No → 변경 상태 (행 색칠용)
     df = df.reset_index(drop=True)
 
     problems = find_problems(full)
     bad = problems.groupby(["No", "col"]).size().index     # 문제 있는 (No, 열) 목록
 
     def paint(row):
-        base = ROW_COLORS.get(row["변경"], "")
+        base = ROW_COLORS.get(status[row["No"]], "")
         if row["history"] == "삭제":
             base = "#f3f4f6;color:#9aa1ad"
         return [("background-color:#fdecec;color:#d8434b;font-weight:700" if (row["No"], c) in bad
@@ -742,8 +744,8 @@ def on_select(full, shown, evt: gr.SelectData):
 # 화면 구성
 # =====================================================================
 def build() -> gr.Blocks:
-    with gr.Blocks(title="민감 테이블 식별 PoC") as demo:
-        gr.HTML("<div class='apptitle'>Data Lake 민감 테이블 식별</div>")
+    with gr.Blocks(title="고위험 데이터 분류기") as demo:
+        gr.HTML("<div class='apptitle'>고위험 데이터 분류기</div>")
         with gr.Tabs(elem_id="steps", selected="run") as tabs:   # 앱을 열면 STEP 3(실행 · 결과)부터
 
             # ── 1 키워드 관리 ──
@@ -758,8 +760,8 @@ def build() -> gr.Blocks:
                 with gr.Row(elem_id="kw-tablebar"):          # 표 머리줄의 복사·확대 아이콘 왼쪽에 겹쳐 놓는다
                     kw_addbtn = gr.Button("＋ 행 추가", size="sm", scale=0, min_width=90)
                 kw_table = gr.Dataframe(value=kw_view(first, first, "전체", ""), interactive=True, wrap=True,
-                                        static_columns=[0, 1], max_height=520,
-                                        column_widths=["56px", "70px", "90px", "120px", "22%", "18%", "110px", "120px", "120px", "80px"],
+                                        static_columns=[0], max_height=520,
+                                        column_widths=["56px", "90px", "120px", "24%", "20%", "110px", "120px", "120px", "80px"],
                                         label="셀을 눌러 편집 · 초록 = 신규, 노랑 = 수정, 회색 = history '삭제', 빨강 = 저장 전에 고칠 칸")
                 with gr.Row(elem_classes="actionbar"):
                     kw_bar = gr.HTML(b0)
@@ -845,7 +847,7 @@ def build() -> gr.Blocks:
                     # 가운데: 결과 미리보기 → KPI 카드(누르면 필터) → 유형 분포 → 표
                     with gr.Column(scale=3):
                         with gr.Row():
-                            gr.HTML("<div class='section-title'>민감 테이블 식별 결과</div>", container=False, padding=False)
+                            gr.HTML("<div class='section-title'>테이블 분류 결과</div>", container=False, padding=False)
                             download_btn = download_button(None)
                         with gr.Row():
                             kpis = [gr.Button(f"{name}\n-", elem_classes=["kpi", cls], min_width=110) for _, name, cls in KPI]
