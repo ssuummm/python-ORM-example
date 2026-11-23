@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from src.classifier import SensitiveTableClassifier
+from src.tagger import HighRiskTagger
 from src.config import load_settings
 from src.llm_client import create_client
 from src.loader import load_keywords, load_tables
@@ -54,10 +55,20 @@ def run(schema: str = SCHEMAS[0], model: str | None = None, reasoning_effort: st
     logging.info("스키마 %s · 키워드 %d개, 대상 테이블 %d개 · 모델 %s · reasoning_effort %s",
                  schema, len(keywords), len(tables), s.model, getattr(s, "reasoning_effort", "-"))
 
-    clf = SensitiveTableClassifier(keywords, s, create_client(s))
+    client = create_client(s)
+    classifier = SensitiveTableClassifier(keywords, s, client)   # 1단계: 민감 여부 판정
+    tagger = HighRiskTagger(keywords, s, client)                 # 2단계: 고위험 유형 태깅
+
+    def process_table(table):
+        """테이블 1건: 민감 여부를 판정하고, 민감이면 고위험 유형 태그를 붙인다."""
+        result = classifier.classify(table)
+        if result.decision == "sensitive":
+            tagger.tag_result(table, result)
+        return result
+
     counts: Counter = Counter()
     with ResultWriter(OUT_DIR, append=False) as w, ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = {ex.submit(clf.classify, t): t for t in tables}
+        futs = {ex.submit(process_table, t): t for t in tables}
         for i, f in enumerate(as_completed(futs), 1):
             r = f.result()
             w.write(r)

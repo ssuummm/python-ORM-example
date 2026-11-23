@@ -1,4 +1,4 @@
-"""민감 테이블의 고위험 유형(태그) 매핑.
+"""2단계 고위험 유형 태깅: 민감 테이블의 고위험 유형(태그) 매핑.
 
 민감 판정·검증이 끝난 테이블에 대해, 판정 근거(민감 컬럼·행 조건·매칭 키워드·판정 이유)를
 LLM에 한 번 더 보내 어떤 고위험 유형에 해당하는지 고른다. 유형은 여러 개 고를 수 있다.
@@ -57,10 +57,26 @@ def build_tag_input(table: TableMeta, result: TableResult, kw_index: dict[str, K
 
 
 class HighRiskTagger:
-    def __init__(self, client: LLMClient, settings: Settings):
-        self.client = client
+    def __init__(self, keywords: list[Keyword], settings: Settings, client: LLMClient):
+        self.kw_index = {k.keyword_id: k for k in keywords}   # 매칭 키워드의 설명을 찾을 때 사용
         self.s = settings
+        self.client = client
         self.system_prompt = TAG_PROMPT_FILE.read_text(encoding="utf-8")
+
+    def tag_result(self, table: TableMeta, result: TableResult) -> TableResult:
+        """민감 테이블의 결과에 고위험 유형 태그를 붙인다.
+
+        태그가 없거나 LLM 호출이 실패해도 error로 만들지 않고 검토 필요(needs_review)로 둔다.
+        """
+        try:
+            result.high_risk_tags = self.tag(table, result, self.kw_index)
+            if not result.high_risk_tags:
+                result.review_reasons.append("고위험 유형 미매핑")
+        except Exception as e:
+            log.warning("태그 매핑 실패: %s (%s)", table.table_id, e)
+            result.review_reasons.append(f"고위험 유형 태그 매핑 실패: {e}")
+        result.needs_review = bool(result.review_reasons)
+        return result
 
     def tag(self, table: TableMeta, result: TableResult, kw_index: dict[str, Keyword]) -> list[HighRiskTag]:
         """LLM으로 고위험 유형을 고르고, 정해진 유형명만 남겨 돌려준다. 실패하면 ValueError."""
