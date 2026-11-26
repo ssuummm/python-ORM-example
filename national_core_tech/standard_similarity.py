@@ -52,22 +52,22 @@ KEYWORD_EMB_FILE = "keyword_emb.npy"
 # 표준 파일별 임베딩 캐시를 저장할 폴더
 CACHE_DIR = "emb_cache"
 
-# 분석할 표준 파일 목록 (파일 경로는 실제에 맞게 수정)
+# 분석할 표준 파일 목록 (탭 구분 txt 파일, 파일 경로는 실제에 맞게 수정)
 #   - columns: 키워드와 유사도를 비교할 컬럼 (결과 엑셀에도 이 순서대로 나옴)
 #   - output : 결과 엑셀 파일 이름
 TARGETS = {
     "표준단어": {
-        "file": "표준단어.xlsx",
+        "file": "data/smartda_표준단어.txt",
         "columns": ["논리명", "물리명", "물리의미", "설명"],
         "output": "결과_표준단어_유사도.xlsx",
     },
     "표준도메인": {
-        "file": "표준도메인.xlsx",
+        "file": "data/smartda_표준도메인.txt",
         "columns": ["도메인명", "설명"],
         "output": "결과_표준도메인_유사도.xlsx",
     },
     "표준용어": {
-        "file": "표준용어.xlsx",
+        "file": "data/smartda_표준용어.txt",
         "columns": ["논리명", "물리명", "구성정보", "물리의미", "도메인명", "설명"],
         "output": "결과_표준용어_유사도.xlsx",
     },
@@ -79,7 +79,9 @@ TARGETS = {
 # =============================================================================
 
 def read_table(path):
-    """확장자에 따라 엑셀 또는 CSV 파일을 읽는다."""
+    """확장자에 따라 txt(탭 구분), CSV, 엑셀 파일을 읽는다."""
+    if path.endswith(".txt"):
+        return pd.read_csv(path, sep="\t")
     if path.endswith(".csv"):
         return pd.read_csv(path)
     return pd.read_excel(path)
