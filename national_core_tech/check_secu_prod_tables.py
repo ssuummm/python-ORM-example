@@ -170,6 +170,16 @@ def build_total_row_query(table_name):
 # ============================================================
 # 테이블 1개 조사하기 (이 함수가 병렬로 여러 번 동시에 실행됨)
 # ============================================================
+def get_query_table_name(table_name):
+    """쿼리에 쓸 테이블명. mes 테이블은 앞에 'mes.' 스키마를 붙인다."""
+    if "." in table_name:
+        # 이미 '스키마.테이블' 형태면 그대로 사용
+        return table_name
+    if table_name.lower().startswith("mes_"):
+        return f"mes.{table_name}"
+    return table_name
+
+
 def calculate_ratio(part_count, total_count):
     if total_count == 0:
         return 0.0
@@ -177,6 +187,9 @@ def calculate_ratio(part_count, total_count):
 
 
 def investigate_table(table_name, prod_id_columns):
+    # 쿼리에서 쓸 테이블명 (mes 테이블은 'mes.' 스키마를 붙임)
+    query_table_name = get_query_table_name(table_name)
+
     # 기본값 (조회 실패하거나 제품 ID 컬럼이 없을 때 이 값으로 남음)
     table_result = {
         "테이블명": table_name,
@@ -195,7 +208,7 @@ def investigate_table(table_name, prod_id_columns):
 
     try:
         # Step 6. 총 Row 수
-        total_row_count = run_count_query(build_total_row_query(table_name))
+        total_row_count = run_count_query(build_total_row_query(query_table_name))
         table_result["총 Row 수"] = total_row_count
 
         # 제품 ID 컬럼이 없거나, 테이블이 비어 있으면 더 조회할 필요 없음
@@ -207,7 +220,7 @@ def investigate_table(table_name, prod_id_columns):
 
         # Step 3. DRAM Row Count
         dram_row_count = run_count_query(
-            build_row_count_query(table_name, prod_id_columns, DRAM_PROD_SUBQUERY)
+            build_row_count_query(query_table_name, prod_id_columns, DRAM_PROD_SUBQUERY)
         )
 
         # DRAM Row가 0이면, HBM(DRAM의 일부)도 0이므로 나머지 조회 생략
@@ -216,17 +229,17 @@ def investigate_table(table_name, prod_id_columns):
 
         # Step 4. DRAM 제품 수
         dram_prod_count = run_count_query(
-            build_prod_count_query(table_name, prod_id_columns, DRAM_PROD_SUBQUERY)
+            build_prod_count_query(query_table_name, prod_id_columns, DRAM_PROD_SUBQUERY)
         )
 
         # Step 5. HBM Row Count / 제품 수
         hbm_row_count = run_count_query(
-            build_row_count_query(table_name, prod_id_columns, HBM_PROD_SUBQUERY)
+            build_row_count_query(query_table_name, prod_id_columns, HBM_PROD_SUBQUERY)
         )
         hbm_prod_count = 0
         if hbm_row_count > 0:
             hbm_prod_count = run_count_query(
-                build_prod_count_query(table_name, prod_id_columns, HBM_PROD_SUBQUERY)
+                build_prod_count_query(query_table_name, prod_id_columns, HBM_PROD_SUBQUERY)
             )
 
         # Step 7. 보유 여부(Y/N) / 비율
